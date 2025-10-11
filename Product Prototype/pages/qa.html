@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RAG 问答 - XU-News AI</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <script type="module">
+    import { createApp, ref, onMounted } from "https://unpkg.com/vue@3/dist/vue.esm-browser.prod.js";
+    import { Navbar } from "../components/navbar.js";
+    import { SiteFooter } from "../components/footer.js";
+    createApp({
+      components: { Navbar, SiteFooter },
+      setup(){
+        const q = new URLSearchParams(location.search).get('q') || '';
+        const query = ref(decodeURIComponent(q));
+        const chat = ref([]);
+        const streaming = ref(false);
+        const settings = ref({ topK: 5, reRank: true, web: false });
+        const ask = () => {
+          if(!query.value) return;
+          chat.value.push({ role: 'user', text: query.value });
+          streaming.value = true;
+          let idx = chat.value.push({ role: 'ai', text: '' }) - 1;
+          const answer = '这是基于检索内容与模型生成的综合回答，占位文本演示流式输出。';
+          let i = 0;
+          const timer = setInterval(()=>{
+            chat.value[idx].text += answer[i] || '';
+            i++;
+            if(i > answer.length){
+              clearInterval(timer);
+              streaming.value = false;
+              chat.value[idx].refs = [
+                { title: '新华社：AI 大模型进展', score: 0.92, url: '#' },
+                { title: '央视新闻：产业应用落地', score: 0.88, url: '#' }
+              ];
+            }
+          }, 20);
+          query.value = '';
+        };
+        onMounted(()=>{ if(query.value){ ask(); } });
+        return { query, chat, streaming, settings, ask };
+      }
+    }).mount('#app');
+  </script>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <Navbar></Navbar>
+    <main class="container" style="padding:20px 0; display:grid; gap:12px;">
+      <div class="card">
+        <div class="card-pad">
+          <div class="grid" style="gap:10px; grid-template-columns: 1fr auto auto auto; align-items:center;">
+            <input class="input" placeholder="提出你的问题，例如：过去一年AI投融资走势？" v-model="query" @keyup.enter="ask" />
+            <label class="chip"><input type="checkbox" v-model="settings.reRank" /> 重排</label>
+            <label class="chip"><input type="checkbox" v-model="settings.web" /> 联网</label>
+            <button class="btn primary" @click="ask">生成答案</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat">
+        <div v-for="(m,i) in chat" :key="i" class="bubble" :class="m.role==='user' ? 'user' : 'ai'">
+          <div>{{ m.text }}</div>
+          <div class="refs" v-if="m.refs">
+            <div class="ref" v-for="(r,ri) in m.refs" :key="ri">
+              <span class="chip score">相关度 {{ r.score }}</span>
+              <a :href="r.url" target="_blank">{{ r.title }}</a>
+            </div>
+          </div>
+        </div>
+        <div v-if="streaming" class="bubble ai">生成中…</div>
+      </div>
+    </main>
+    <SiteFooter></SiteFooter>
+  </div>
+  
+  <!-- 加载状态 -->
+  <div class="app-loading" id="loading">
+    <div class="spinner"></div>
+    <div class="text">加载中...</div>
+  </div>
+  
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const loading = document.getElementById('loading');
+      if (loading) loading.style.display = 'none';
+    });
+  </script>
+</body>
+</html>
+
+

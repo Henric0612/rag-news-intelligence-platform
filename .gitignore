@@ -1,0 +1,300 @@
+# ========================================
+# XU-News-AI-RAG 项目级 .gitignore
+# ========================================
+
+# ========================================
+# Python 相关
+# ========================================
+# 字节码文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 分发 / 打包
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# 单元测试 / 覆盖率报告
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# 虚拟环境
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# ========================================
+# 数据库相关
+# ========================================
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# PostgreSQL
+*.dump
+*.sql
+
+# MySQL
+*.sql.gz
+
+# ========================================
+# 日志文件
+# ========================================
+*.log
+logs/
+log/
+
+# ========================================
+# 环境变量和配置
+# ========================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+config.ini
+secrets.json
+
+# ========================================
+# IDE 和编辑器
+# ========================================
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ========================================
+# 操作系统相关
+# ========================================
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.tmp
+*.temp
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ========================================
+# 前端相关 (Node.js / React / Vue)
+# ========================================
+# 依赖
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# 构建输出
+dist/
+build/
+out/
+
+# 缓存
+.npm
+.eslintcache
+.stylelintcache
+
+# 环境变量
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 测试覆盖率
+coverage/
+.nyc_output
+
+# Playwright 测试结果
+test-results/
+playwright-report/
+playwright/.cache/
+
+# ========================================
+# AI/ML 相关
+# ========================================
+# 模型文件
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.hdf5
+*.pb
+*.onnx
+*.tflite
+
+# 向量数据库
+faiss_index/
+*.faiss
+*.index
+
+# 数据集
+data/raw/
+data/processed/
+datasets/
+*.csv
+*.json
+*.jsonl
+*.parquet
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# ========================================
+# 项目特定文件
+# ========================================
+# 上传文件
+uploads/
+static/uploads/
+
+# 临时文件
+temp/
+tmp/
+.tmp/
+
+# 备份文件
+*.bak
+*.backup
+*.old
+
+# 压缩文件
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# ========================================
+# 文档生成
+# ========================================
+# Sphinx
+docs/_build/
+
+# MkDocs
+site/
+
+# ========================================
+# 部署相关
+# ========================================
+# Docker
+.dockerignore
+
+# Kubernetes
+*.yaml.bak
+*.yml.bak
+
+# ========================================
+# 其他
+# ========================================
+# 证书文件
+*.pem
+*.key
+*.crt
+*.p12
+
+# 敏感信息
+secrets/
+credentials/
+*.secret
+
+# 性能分析
+*.prof
+*.profile
+
+# 内存转储
+*.dmp
+*.core

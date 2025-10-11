@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>首页入口 - XU-News AI</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    .auth-wrap { display:grid; place-items:center; min-height:100vh; padding:24px; }
+    .auth-card { width:100%; max-width:420px; }
+    .auth-logo { display:flex; align-items:center; gap:10px; justify-content:center; margin-bottom:6px; }
+    .switch { text-align:center; color:var(--muted); margin-top:12px; }
+    .switch a { color:var(--accent); text-decoration:none; }
+  </style>
+  <script type="module">
+    import { createApp, ref } from "https://unpkg.com/vue@3/dist/vue.esm-browser.prod.js";
+    import { SiteFooter } from "../components/footer.js";
+    createApp({
+      components: { SiteFooter },
+      setup(){
+        const isLogin = ref(true);
+        const email = ref("");
+        const password = ref("");
+        const loading = ref(false);
+        const submit = () => {
+          loading.value = true;
+          setTimeout(()=>{
+            loading.value = false;
+            window.location.href = "home.html";
+          },800);
+        };
+        return { isLogin, email, password, loading, submit };
+      }
+    }).mount('#app');
+  </script>
+  </head>
+<body>
+  <div id="app" v-cloak>
+    <div class="auth-wrap">
+      <div class="card auth-card">
+        <div class="card-pad">
+          <div class="auth-logo">
+            <span class="brand-dot"></span>
+            <strong>XU-News AI</strong>
+          </div>
+          <h2 style="margin:8px 0 4px; text-align:center;">{{ isLogin ? '登录' : '注册' }}</h2>
+          <p style="text-align:center; color:var(--muted); margin:0 0 16px;">智能新闻检索与RAG问答</p>
+          <div class="grid" style="gap:10px;">
+            <input class="input" placeholder="邮箱" v-model="email" />
+            <input class="input" type="password" placeholder="密码" v-model="password" />
+            <button class="btn primary" @click="submit" :disabled="loading">{{ loading ? '处理中…' : (isLogin ? '登录' : '注册') }}</button>
+            <a class="btn ghost" href="home.html">先逛逛</a>
+          </div>
+          <div class="switch">
+            <span v-if="isLogin">没有账号？<a href="#" @click="isLogin=false">注册</a></span>
+            <span v-else>已有账号？<a href="#" @click="isLogin=true">登录</a></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <SiteFooter></SiteFooter>
+  </div>
+  
+  <!-- 加载状态 -->
+  <div class="app-loading" id="loading">
+    <div class="spinner"></div>
+    <div class="text">加载中...</div>
+  </div>
+  
+  <script>
+    // 页面加载完成后隐藏加载动画
+    window.addEventListener('DOMContentLoaded', () => {
+      const loading = document.getElementById('loading');
+      if (loading) loading.style.display = 'none';
+    });
+  </script>
+</body>
+</html>
+
+

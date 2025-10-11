@@ -1,0 +1,365 @@
+/* Element Plus 主题定制 */
+:root {
+  --el-color-primary: var(--primary-color);
+  --el-color-primary-light-1: var(--primary-light);
+  --el-color-primary-dark-2: var(--primary-dark);
+  
+  --el-color-success: var(--success-color);
+  --el-color-warning: var(--warning-color);
+  --el-color-danger: var(--error-color);
+  --el-color-info: var(--info-color);
+  
+  --el-bg-color: var(--bg-color);
+  --el-bg-color-page: var(--bg-secondary);
+  --el-bg-color-overlay: var(--bg-color);
+  
+  --el-text-color-primary: var(--text-primary);
+  --el-text-color-regular: var(--text-secondary);
+  --el-text-color-secondary: var(--text-tertiary);
+  --el-text-color-placeholder: var(--gray-400);
+  --el-text-color-disabled: var(--gray-400);
+  
+  --el-border-color: var(--border-color);
+  --el-border-color-light: var(--border-light);
+  --el-border-color-lighter: var(--border-light);
+  --el-border-color-extra-light: var(--border-light);
+  
+  --el-fill-color: var(--bg-tertiary);
+  --el-fill-color-light: var(--bg-secondary);
+  --el-fill-color-lighter: var(--bg-secondary);
+  --el-fill-color-extra-light: var(--bg-secondary);
+  --el-fill-color-blank: transparent;
+  
+  --el-box-shadow: var(--shadow-md);
+  --el-box-shadow-light: var(--shadow-sm);
+  --el-box-shadow-lighter: var(--shadow-sm);
+  --el-box-shadow-dark: var(--shadow-lg);
+  
+  --el-border-radius-base: var(--radius-md);
+  --el-border-radius-small: var(--radius-sm);
+  --el-border-radius-round: var(--radius-full);
+  --el-border-radius-circle: var(--radius-full);
+  
+  --el-font-size-extra-large: var(--text-xl);
+  --el-font-size-large: var(--text-lg);
+  --el-font-size-medium: var(--text-base);
+  --el-font-size-base: var(--text-sm);
+  --el-font-size-small: var(--text-xs);
+  --el-font-size-extra-small: var(--text-xs);
+  
+  --el-font-family: var(--font-family);
+  --el-font-weight-primary: var(--font-medium);
+  
+  --el-transition-duration: var(--transition-normal);
+  --el-transition-duration-fast: var(--transition-fast);
+}
+
+/* 暗色主题 Element Plus 变量 */
+[data-theme="dark"] {
+  --el-bg-color: var(--gray-900);
+  --el-bg-color-page: var(--gray-800);
+  --el-bg-color-overlay: var(--gray-800);
+  
+  --el-text-color-primary: var(--gray-100);
+  --el-text-color-regular: var(--gray-300);
+  --el-text-color-secondary: var(--gray-400);
+  
+  --el-border-color: var(--gray-700);
+  --el-border-color-light: var(--gray-800);
+  --el-border-color-lighter: var(--gray-800);
+  --el-border-color-extra-light: var(--gray-800);
+  
+  --el-fill-color: var(--gray-700);
+  --el-fill-color-light: var(--gray-800);
+  --el-fill-color-lighter: var(--gray-800);
+  --el-fill-color-extra-light: var(--gray-800);
+}
+
+/* 深色模式输入框样式修复 */
+[data-theme="dark"] .el-input__inner {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .el-input__inner:focus {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 2px var(--primary-bg) !important;
+}
+
+[data-theme="dark"] .el-input__inner::placeholder {
+  color: var(--text-tertiary) !important;
+}
+
+/* 深色模式：自动填充使用深色背景 */
+[data-theme="dark"] input:-webkit-autofill,
+[data-theme="dark"] input:-webkit-autofill:hover,
+[data-theme="dark"] input:-webkit-autofill:focus,
+[data-theme="dark"] input:-webkit-autofill:active,
+[data-theme="dark"] .el-input__inner:-webkit-autofill,
+[data-theme="dark"] .el-input__inner:-webkit-autofill:hover,
+[data-theme="dark"] .el-input__inner:-webkit-autofill:focus,
+[data-theme="dark"] .el-input__inner:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #1f2937 inset !important;
+  -webkit-text-fill-color: #f3f4f6 !important;
+  background-color: #1f2937 !important;
+  background-image: none !important;
+  color: #f3f4f6 !important;
+  caret-color: #f3f4f6 !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+}
+
+/* 浅色模式：自动填充使用默认样式 */
+[data-theme="light"] input:-webkit-autofill,
+[data-theme="light"] input:-webkit-autofill:hover,
+[data-theme="light"] input:-webkit-autofill:focus,
+[data-theme="light"] input:-webkit-autofill:active,
+[data-theme="light"] .el-input__inner:-webkit-autofill,
+[data-theme="light"] .el-input__inner:-webkit-autofill:hover,
+[data-theme="light"] .el-input__inner:-webkit-autofill:focus,
+[data-theme="light"] .el-input__inner:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  -webkit-text-fill-color: #000000 !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: #000000 !important;
+  caret-color: #000000 !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+}
+
+/* 针对 Element Plus 输入框的特殊处理 - 深色模式 */
+[data-theme="dark"] .el-input:-webkit-autofill .el-input__wrapper,
+[data-theme="dark"] .el-input:-webkit-autofill:hover .el-input__wrapper,
+[data-theme="dark"] .el-input:-webkit-autofill:focus .el-input__wrapper,
+[data-theme="dark"] .el-input:-webkit-autofill:active .el-input__wrapper {
+  background-color: #1f2937 !important;
+  border-color: #374151 !important;
+  box-shadow: 0 0 0 1px #374151 inset !important;
+}
+
+/* 针对 Element Plus 输入框的特殊处理 - 浅色模式 */
+[data-theme="light"] .el-input:-webkit-autofill .el-input__wrapper,
+[data-theme="light"] .el-input:-webkit-autofill:hover .el-input__wrapper,
+[data-theme="light"] .el-input:-webkit-autofill:focus .el-input__wrapper,
+[data-theme="light"] .el-input:-webkit-autofill:active .el-input__wrapper {
+  background-color: #ffffff !important;
+  border-color: #d1d5db !important;
+  box-shadow: 0 0 0 1px #d1d5db inset !important;
+}
+
+/* 针对 tech-input 类的特殊处理 - 深色模式 */
+[data-theme="dark"] .tech-input:-webkit-autofill .el-input__inner,
+[data-theme="dark"] .tech-input:-webkit-autofill:hover .el-input__inner,
+[data-theme="dark"] .tech-input:-webkit-autofill:focus .el-input__inner,
+[data-theme="dark"] .tech-input:-webkit-autofill:active .el-input__inner {
+  -webkit-box-shadow: 0 0 0 1000px #1f2937 inset !important;
+  -webkit-text-fill-color: #f3f4f6 !important;
+  background-color: #1f2937 !important;
+  background-image: none !important;
+  color: #f3f4f6 !important;
+  caret-color: #f3f4f6 !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+}
+
+/* 针对 tech-input 类的特殊处理 - 浅色模式 */
+[data-theme="light"] .tech-input:-webkit-autofill .el-input__inner,
+[data-theme="light"] .tech-input:-webkit-autofill:hover .el-input__inner,
+[data-theme="light"] .tech-input:-webkit-autofill:focus .el-input__inner,
+[data-theme="light"] .tech-input:-webkit-autofill:active .el-input__inner {
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  -webkit-text-fill-color: #000000 !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: #000000 !important;
+  caret-color: #000000 !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+}
+
+/* 深色模式 tech-input 样式修复 */
+[data-theme="dark"] .tech-input .el-input__inner {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .tech-input .el-input__inner:focus {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 2px var(--primary-bg) !important;
+}
+
+[data-theme="dark"] .tech-input .el-input__inner::placeholder {
+  color: var(--text-tertiary) !important;
+}
+
+/* 深色模式输入框图标颜色 */
+[data-theme="dark"] .el-input__prefix-inner,
+[data-theme="dark"] .el-input__suffix-inner {
+  color: var(--text-tertiary) !important;
+}
+
+[data-theme="dark"] .el-input__prefix-inner:hover,
+[data-theme="dark"] .el-input__suffix-inner:hover {
+  color: var(--text-secondary) !important;
+}
+
+/* 深色模式文本域样式修复 */
+[data-theme="dark"] .el-textarea__inner {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .el-textarea__inner:focus {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 2px var(--primary-bg) !important;
+}
+
+[data-theme="dark"] .el-textarea__inner::placeholder {
+  color: var(--text-tertiary) !important;
+}
+
+/* 深色模式所有输入组件样式修复 */
+[data-theme="dark"] .el-input,
+[data-theme="dark"] .el-textarea,
+[data-theme="dark"] .el-select,
+[data-theme="dark"] .el-date-picker {
+  --el-input-bg-color: var(--bg-secondary) !important;
+  --el-input-border-color: var(--border-color) !important;
+  --el-input-text-color: var(--text-primary) !important;
+  --el-input-placeholder-color: var(--text-tertiary) !important;
+}
+
+/* 深色模式输入框包装器 */
+[data-theme="dark"] .el-input__wrapper {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+  box-shadow: 0 0 0 1px var(--border-color) inset !important;
+}
+
+[data-theme="dark"] .el-input__wrapper:hover {
+  border-color: var(--border-dark) !important;
+}
+
+[data-theme="dark"] .el-input__wrapper.is-focus {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 1px var(--primary-color) inset !important;
+}
+
+/* 深色模式输入框内容 */
+[data-theme="dark"] .el-input__inner {
+  background-color: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .el-input__inner::placeholder {
+  color: var(--text-tertiary) !important;
+}
+
+/* 深色模式选择器样式 */
+[data-theme="dark"] .el-select .el-input__wrapper {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] .el-select-dropdown {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] .el-select-dropdown__item {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .el-select-dropdown__item:hover {
+  background-color: var(--bg-tertiary) !important;
+}
+
+[data-theme="dark"] .el-select-dropdown__item.is-selected {
+  background-color: var(--primary-bg) !important;
+  color: var(--primary-color) !important;
+}
+
+/* 自定义组件样式 */
+.tech-card {
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  transition: all var(--transition-normal);
+}
+
+.tech-card:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--primary-color);
+  transform: translateY(-1px);
+}
+
+.tech-button {
+  border-radius: var(--radius-md);
+  font-weight: var(--font-medium);
+  transition: all var(--transition-fast);
+}
+
+.tech-input {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-fast);
+}
+
+.tech-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-bg);
+}
+
+.tech-table {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.tech-modal {
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+}
+
+.tech-sidebar {
+  background: var(--bg-color);
+  border-right: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+
+.tech-header {
+  background: var(--bg-color);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 登录界面特殊样式 */
+.login-container {
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-xl);
+  backdrop-filter: blur(10px);
+}
+
+.login-container:hover {
+  box-shadow: var(--shadow-xl), 0 0 0 1px var(--primary-color);
+}
+
+/* 增强分块区域对比度 */
+.dashboard .tech-card,
+.knowledge-page .tech-card,
+.analytics-page .tech-card {
+  border: 1px solid var(--border-dark);
+  box-shadow: var(--shadow-md);
+}
+
+.dashboard .tech-card:hover,
+.knowledge-page .tech-card:hover,
+.analytics-page .tech-card:hover {
+  border-color: var(--primary-color);
+  box-shadow: var(--shadow-lg);
+}

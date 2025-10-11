@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>上传文档 - XU-News AI</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <script type="module">
+    import { createApp, ref } from "https://unpkg.com/vue@3/dist/vue.esm-browser.prod.js";
+    import { Navbar } from "../components/navbar.js";
+    import { SiteFooter } from "../components/footer.js";
+    createApp({
+      components: { Navbar, SiteFooter },
+      setup(){
+        const files = ref([]);
+        const uploading = ref(false);
+        const progress = ref(0);
+        const onPick = (e) => { files.value = Array.from(e.target.files || []); };
+        const start = () => {
+          if(!files.value.length) return;
+          uploading.value = true; progress.value = 0;
+          const timer = setInterval(()=>{
+            progress.value += 6;
+            if(progress.value >= 100){ clearInterval(timer); uploading.value=false; window.location.href='library.html'; }
+          }, 80);
+        };
+        return { files, uploading, progress, onPick, start };
+      }
+    }).mount('#app');
+  </script>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <Navbar></Navbar>
+    <main class="container" style="padding:20px 0;">
+      <div class="card">
+        <div class="card-pad">
+          <h2 style="margin:0 0 8px;">上传文档</h2>
+          <p style="margin:0 0 12px; color:var(--muted);">支持 PDF、TXT、DOC，自动抽取与向量化。</p>
+          <input type="file" multiple @change="onPick" style="margin-bottom:12px;" />
+          <div class="list">
+            <div class="item" v-for="f in files" :key="f.name">
+              <strong>{{ f.name }}</strong>
+              <div class="meta">{{ (f.size/1024).toFixed(1) }} KB</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; margin-top:12px;">
+            <button class="btn primary" @click="start" :disabled="uploading">{{ uploading ? '处理中… '+progress+'%' : '开始处理' }}</button>
+            <a class="btn" href="library.html">查看我的知识库</a>
+          </div>
+        </div>
+      </div>
+    </main>
+    <SiteFooter></SiteFooter>
+  </div>
+  
+  <!-- 加载状态 -->
+  <div class="app-loading" id="loading">
+    <div class="spinner"></div>
+    <div class="text">加载中...</div>
+  </div>
+  
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const loading = document.getElementById('loading');
+      if (loading) loading.style.display = 'none';
+    });
+  </script>
+</body>
+</html>
+
+

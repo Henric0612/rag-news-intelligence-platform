@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>检索结果 - XU-News AI</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <script type="module">
+    import { createApp, ref, onMounted } from "https://unpkg.com/vue@3/dist/vue.esm-browser.prod.js";
+    import { Navbar } from "../components/navbar.js";
+    import { SiteFooter } from "../components/footer.js";
+    createApp({
+      components: { Navbar, SiteFooter },
+      setup(){
+        const q = new URLSearchParams(location.search).get('q') || '';
+        const query = ref(decodeURIComponent(q));
+        const results = ref([]);
+        const loading = ref(true);
+        const filter = ref({ time: '近7天', type: '全部' });
+        onMounted(()=>{
+          setTimeout(()=>{
+            results.value = Array.from({length: 8}).map((_,i)=>({
+              id: i+1,
+              title: `${query.value || 'AI 大模型'} 相关报道 ${i+1}`,
+              summary: '摘要占位：介绍新闻核心信息与背景，便于快速判断相关度。',
+              source: '新华社',
+              date: '2025-01-10',
+              score: (Math.random()*0.2+0.8).toFixed(2)
+            }));
+            loading.value = false;
+          }, 600);
+        });
+        const toQA = () => {
+          const qq = encodeURIComponent(query.value);
+          window.location.href = `qa.html?q=${qq}`;
+        };
+        const toSearch = () => {
+          const qq = encodeURIComponent(query.value);
+          window.location.href = `results.html?q=${qq}`;
+        };
+        return { query, results, loading, filter, toQA, toSearch };
+      }
+    }).mount('#app');
+  </script>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <Navbar></Navbar>
+    <main class="container" style="padding:20px 0;">
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-pad">
+          <div class="grid" style="gap:10px; grid-template-columns: 1fr auto auto; align-items:center;">
+            <input class="input" v-model="query" @keyup.enter="toSearch" placeholder="修改关键词并回车检索" />
+            <select class="select" v-model="filter.time">
+              <option>近7天</option>
+              <option>近30天</option>
+              <option>近1年</option>
+              <option>全部</option>
+            </select>
+            <button class="btn primary" @click="toSearch">重新检索</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid" style="grid-template-columns: 1fr; gap:12px;">
+        <div class="card">
+          <div class="card-pad">
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+              <strong>检索结果</strong>
+              <span class="chip">时间：{{ filter.time }}</span>
+            </div>
+            <div v-if="loading">加载中…</div>
+            <div v-else class="list">
+              <a v-for="r in results" :key="r.id" class="item" :href="`qa.html?q=${encodeURIComponent(r.title)}`">
+                <h3>{{ r.title }}</h3>
+                <div class="meta">
+                  <span>{{ r.source }}</span>
+                  <span>{{ r.date }}</span>
+                  <span class="chip score">相关度 {{ r.score }}</span>
+                </div>
+                <div style="color:var(--muted);">{{ r.summary }}</div>
+              </a>
+            </div>
+            <div style="margin-top:12px; display:flex; gap:10px;">
+              <button class="btn" @click="toQA">根据结果生成答案</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+    <SiteFooter></SiteFooter>
+  </div>
+  
+  <!-- 加载状态 -->
+  <div class="app-loading" id="loading">
+    <div class="spinner"></div>
+    <div class="text">加载中...</div>
+  </div>
+  
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const loading = document.getElementById('loading');
+      if (loading) loading.style.display = 'none';
+    });
+  </script>
+</body>
+</html>
+
+

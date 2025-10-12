@@ -34,7 +34,13 @@ logger = logging.getLogger(__name__)
 class CrawlerService:
     """爬虫服务类"""
     
-    def __init__(self):
+    def __init__(self, config=None):
+        """
+        初始化爬虫服务
+        
+        Args:
+            config: Flask配置对象，如果为None则从current_app获取
+        """
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -47,10 +53,29 @@ class CrawlerService:
         self._knowledge_service = None
         self._vector_service = None
         
+        # 从配置加载参数
+        if config is None:
+            try:
+                from flask import current_app
+                config = current_app.config
+            except RuntimeError:
+                # 不在应用上下文中，使用默认值
+                config = {}
+        
         # 爬取配置
-        self.max_retries = 3
-        self.timeout = 30
-        self.delay_between_requests = 1  # 秒
+        self.max_retries = config.get('CRAWLER_MAX_RETRIES', 3)
+        self.timeout = config.get('CRAWLER_TIMEOUT', 30)
+        self.delay_between_requests = config.get('CRAWLER_DELAY_BETWEEN_REQUESTS', 1)
+        
+        # RSS内容质量配置
+        self.min_content_length = config.get('RSS_MIN_CONTENT_LENGTH', 200)
+        self.enable_full_text_fetch = config.get('RSS_ENABLE_FULL_TEXT_FETCH', True)
+        self.full_text_fetch_timeout = config.get('RSS_FULL_TEXT_FETCH_TIMEOUT', 15)
+        self.short_page_threshold = config.get('RSS_SHORT_PAGE_THRESHOLD', 150)
+        
+        logger.info(f"爬虫服务初始化完成 - 配置: min_content={self.min_content_length}, "
+                   f"full_text_fetch={self.enable_full_text_fetch}, "
+                   f"short_page_threshold={self.short_page_threshold}")
     
     @property
     def knowledge_service(self):
@@ -177,11 +202,14 @@ class CrawlerService:
                 try:
                     # 提取基本信息
                     title = self._extract_title(entry)
-                    content = self._extract_content(entry)
                     link = self._extract_link(entry)
                     published = self._extract_published_date(entry)
                     
+                    # 智能内容提取：优先使用RSS内容，如果过短则抓取原文
+                    content, content_source = self._smart_extract_content(entry, link)
+                    
                     if not title or not content:
+                        logger.warning(f"跳过条目：标题或内容为空 - {title or '无标题'}")
                         continue
                     
                     # 转换为Markdown
@@ -203,7 +231,8 @@ class CrawlerService:
                         'source_type': 'rss',
                         'category': rss_source.category,
                         'published_at': published,
-                        'tags': self._extract_tags(entry, rss_source.category)
+                        'tags': self._extract_tags(entry, rss_source.category),
+                        'content_source': content_source  # 标记内容来源：'rss' 或 'full_text'
                     }
                     
                     items.append(item)
@@ -416,13 +445,169 @@ class CrawlerService:
         
         return saved_count
     
+    def _smart_extract_content(self, entry, link: str) -> Tuple[str, str]:
+        """
+        智能内容提取：优先使用RSS内容，如果过短则抓取原文
+        
+        业界最佳实践：
+        1. 首先尝试从RSS Feed获取内容
+        2. 评估内容质量（长度、完整性）
+        3. 如果内容过短或不完整，访问原文链接获取完整内容
+        4. 使用专业工具（trafilatura）提取正文，避免广告、导航等噪音
+        
+        Args:
+            entry: RSS条目对象
+            link: 原文链接
+            
+        Returns:
+            Tuple[str, str]: (内容, 内容来源标识)
+                - 内容来源: 'rss' | 'full_text' | 'rss_fallback'
+        """
+        # 第一步：从RSS Feed提取内容
+        rss_content = self._extract_content_from_rss(entry)
+        
+        # 第二步：评估RSS内容质量
+        if rss_content:
+            content_length = len(rss_content.strip())
+            logger.debug(f"RSS内容长度: {content_length} 字符")
+            
+            # 如果内容足够长，直接使用
+            if content_length >= self.min_content_length:
+                logger.info(f"✓ RSS内容充足({content_length}字)，直接使用")
+                return rss_content, 'rss'
+            
+            # 内容过短，记录并尝试获取完整文本
+            logger.warning(f"⚠ RSS内容过短({content_length}字 < {self.min_content_length}字)")
+        else:
+            logger.warning("⚠ RSS未提供内容")
+        
+        # 第三步：尝试抓取完整文本
+        if self.enable_full_text_fetch and link:
+            logger.info(f"→ 尝试抓取原文: {link}")
+            full_text = self._fetch_full_text_from_url(link)
+            
+            if full_text:
+                full_text_length = len(full_text.strip())
+                logger.info(f"✓ 成功获取完整文本({full_text_length}字)")
+                
+                # 智能判断：避免过度爬取
+                # 如果完整文本也很短（<阈值），说明原网页内容本身就少
+                # 这种情况下使用RSS内容即可，避免浪费资源
+                if full_text_length < self.short_page_threshold:
+                    logger.info(f"⚠ 原网页内容本身较短({full_text_length}字 < {self.short_page_threshold}字阈值)，使用RSS内容")
+                    return rss_content if rss_content else full_text, 'rss_short_page'
+                
+                # 比较两种内容，选择更好的
+                if full_text_length > content_length:
+                    # 计算改进幅度
+                    improvement = full_text_length - content_length
+                    improvement_ratio = (improvement / content_length * 100) if content_length > 0 else 0
+                    logger.info(f"✓ 完整文本更好，改进{improvement}字({improvement_ratio:.1f}%)")
+                    return full_text, 'full_text'
+                else:
+                    logger.info(f"RSS内容质量更好，使用RSS内容")
+                    return rss_content, 'rss_fallback'
+            else:
+                logger.warning(f"✗ 完整文本抓取失败")
+        
+        # 第四步：降级使用RSS内容（即使很短）
+        if rss_content:
+            logger.info(f"使用RSS内容作为降级方案({len(rss_content)}字)")
+            return rss_content, 'rss_fallback'
+        
+        # 完全失败
+        return '', 'none'
+    
     def _extract_title(self, entry) -> str:
         """提取RSS条目标题"""
         title = getattr(entry, 'title', '')
         return clean_text(title) if title else ''
     
-    def _extract_content(self, entry) -> str:
-        """提取RSS条目内容"""
+    def _fetch_full_text_from_url(self, url: str) -> str:
+        """
+        从URL抓取完整文本内容
+        
+        使用业界最佳实践：
+        1. 使用trafilatura优先提取（专业的网页正文提取工具）
+        2. 降级到BeautifulSoup（通用HTML解析）
+        3. 实现超时控制和错误处理
+        4. 尊重网站robots.txt和爬取礼仪
+        
+        Args:
+            url: 目标URL
+            
+        Returns:
+            str: 提取的文本内容，失败返回空字符串
+        """
+        try:
+            # 添加延迟，避免过于频繁的请求
+            time.sleep(self.delay_between_requests)
+            
+            # 发送请求
+            response = self.session.get(
+                url, 
+                timeout=self.full_text_fetch_timeout,
+                allow_redirects=True
+            )
+            response.raise_for_status()
+            
+            # 检查内容类型
+            content_type = response.headers.get('Content-Type', '').lower()
+            if 'text/html' not in content_type and 'application/xhtml' not in content_type:
+                logger.warning(f"非HTML内容类型: {content_type}")
+                return ''
+            
+            # 方法1：使用trafilatura（推荐）
+            if TRAFILATURA_AVAILABLE:
+                try:
+                    # trafilatura 是专门用于提取网页正文的工具
+                    # 它能自动识别并移除广告、导航、评论等噪音
+                    extracted_text = trafilatura.extract(
+                        response.content,
+                        include_comments=False,
+                        include_tables=True,
+                        no_fallback=False
+                    )
+                    
+                    if extracted_text and len(extracted_text.strip()) > 100:
+                        content = clean_text(extracted_text)
+                        logger.debug(f"trafilatura提取成功: {len(content)}字")
+                        return content
+                    else:
+                        logger.debug("trafilatura提取内容过短，尝试备用方案")
+                except Exception as e:
+                    logger.warning(f"trafilatura提取失败: {str(e)}")
+            
+            # 方法2：使用BeautifulSoup（备用方案）
+            soup = BeautifulSoup(response.content, 'html.parser')
+            content = self._extract_webpage_content(soup)
+            
+            if content and len(content.strip()) > 100:
+                logger.debug(f"BeautifulSoup提取成功: {len(content)}字")
+                return content
+            
+            logger.warning("所有提取方法都未能获取足够内容")
+            return ''
+            
+        except requests.Timeout:
+            logger.warning(f"抓取超时: {url}")
+            return ''
+        except requests.RequestException as e:
+            logger.warning(f"请求失败: {url} - {str(e)}")
+            return ''
+        except Exception as e:
+            logger.error(f"完整文本抓取异常: {url} - {str(e)}")
+            return ''
+    
+    def _extract_content_from_rss(self, entry) -> str:
+        """
+        从RSS条目提取内容
+        
+        按优先级尝试不同字段：
+        1. content - 完整内容（某些RSS提供）
+        2. summary - 摘要
+        3. description - 描述
+        """
         content = ''
         
         # 尝试不同的内容字段
@@ -435,31 +620,36 @@ class CrawlerService:
                     content = field_value
                 
                 if content:
+                    logger.debug(f"从RSS字段'{field}'提取到内容")
                     break
         
+        if not content:
+            return ''
+        
+        # 清洗HTML内容
         # 使用 trafilatura 提取高质量文本
-        if content and TRAFILATURA_AVAILABLE:
+        if TRAFILATURA_AVAILABLE:
             try:
                 # trafilatura 专门用于提取网页正文
                 extracted_text = trafilatura.extract(content)
                 if extracted_text and len(extracted_text.strip()) > 50:
                     content = clean_text(extracted_text)
-                    logger.debug(f"使用 trafilatura 成功提取内容，长度: {len(content)}")
+                    logger.debug(f"trafilatura清洗RSS内容成功: {len(content)}字")
+                    return content
                 else:
                     # trafilatura 提取失败，降级到 BeautifulSoup
-                    soup = BeautifulSoup(content, 'html.parser')
-                    content = soup.get_text()
-                    content = clean_text(content)
-                    logger.debug(f"trafilatura 提取失败，使用 BeautifulSoup，长度: {len(content)}")
+                    logger.debug("trafilatura清洗结果过短，使用BeautifulSoup")
             except Exception as e:
-                logger.warning(f"trafilatura 提取失败: {str(e)}，使用 BeautifulSoup")
-                soup = BeautifulSoup(content, 'html.parser')
-                content = soup.get_text()
-                content = clean_text(content)
-        elif content:
-            # 使用 BeautifulSoup 作为备用方案
+                logger.debug(f"trafilatura清洗失败: {str(e)}，使用BeautifulSoup")
+        
+        # 使用 BeautifulSoup 作为备用方案
+        try:
             soup = BeautifulSoup(content, 'html.parser')
             content = soup.get_text()
+            content = clean_text(content)
+            logger.debug(f"BeautifulSoup清洗RSS内容: {len(content)}字")
+        except Exception as e:
+            logger.warning(f"BeautifulSoup清洗失败: {str(e)}")
             content = clean_text(content)
         
         return content

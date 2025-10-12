@@ -70,3 +70,8 @@ export const syncVectorForItem = (id, forceResync = false) => {
 export const batchSyncVectors = (data) => {
   return request.post('/api/knowledge/batch-sync', data)
 }
+
+// 获取模型信息
+export const getModelInfo = () => {
+  return request.get('/api/knowledge/model-info')
+}

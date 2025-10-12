@@ -15,7 +15,13 @@
         @click="handleResultClick(result)"
       >
         <div class="result-header">
-          <h3 class="result-title" v-html="highlightTitle(result.title, query)"></h3>
+          <div class="title-row">
+            <h3 class="result-title" v-html="highlightTitle(result.title, query)"></h3>
+            <span class="view-detail-hint">
+              <el-icon><View /></el-icon>
+              <span>查看详情</span>
+            </span>
+          </div>
           <div class="result-meta">
             <el-tag v-if="result.category" size="small" type="info">
               {{ getCategoryLabel(result.category) }}
@@ -88,7 +94,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, Link, Clock } from '@element-plus/icons-vue'
+import { Search, Link, Clock, View } from '@element-plus/icons-vue'
 
 const props = defineProps({
   results: {
@@ -231,16 +237,49 @@ watch(() => props.results, () => {
   transform: translateY(-2px);
 }
 
+.result-item:hover .result-title {
+  color: #409eff;
+}
+
+.result-item:active {
+  transform: translateY(0);
+}
+
 .result-header {
   margin-bottom: 12px;
 }
 
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.view-detail-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #909399;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.result-item:hover .view-detail-hint {
+  opacity: 1;
+  color: #409eff;
+}
+
 .result-title {
-  margin: 0 0 8px 0;
+  margin: 0;
   font-size: 18px;
   font-weight: 600;
   color: #303133;
   line-height: 1.4;
+  transition: color 0.3s ease;
 }
 
 .result-title :deep(mark) {

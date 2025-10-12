@@ -139,8 +139,7 @@
           stripe
           style="width: 100%"
         >
-          <el-table-column prop="id" label="任务ID" width="80" />
-          <el-table-column prop="source_name" label="源名称" width="150" />
+          <el-table-column prop="source_name" label="源名称" width="200" />
           <el-table-column prop="task_type" label="类型" width="100">
             <template #default="{ row }">
               <el-tag :type="row.task_type === 'rss' ? 'primary' : 'success'">

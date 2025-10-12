@@ -1,5 +1,5 @@
 <template>
-  <PageContainer title="知识库管理" subtitle="管理新闻知识库条目">
+  <PageContainer title="知识库管理" subtitle="管理知识库条目">
     <template #actions>
       <el-button 
         type="success" 
@@ -40,12 +40,48 @@
         </div>
       </div>
       
+      <!-- AI模型信息 - 横向卡片 -->
+      <div v-if="modelInfo" class="model-info-bar tech-card">
+        <div class="model-info-item">
+          <span class="model-label">
+            <el-icon :size="14"><Document /></el-icon>
+            嵌入模型
+          </span>
+          <span class="model-value">{{ modelInfo.embedding.display_name }}</span>
+          <el-tag 
+            :type="modelInfo.embedding.status === 'online' ? 'success' : 'danger'" 
+            size="small"
+            effect="plain"
+          >
+            {{ modelInfo.embedding.status === 'online' ? '在线' : '离线' }}
+          </el-tag>
+          <span class="model-dimension">{{ modelInfo.embedding.dimension }}维</span>
+        </div>
+        
+        <div class="model-divider"></div>
+        
+        <div class="model-info-item">
+          <span class="model-label">
+            <el-icon :size="14"><Sort /></el-icon>
+            重排模型
+          </span>
+          <span class="model-value">{{ modelInfo.rerank.display_name }}</span>
+          <el-tag 
+            :type="modelInfo.rerank.status === 'online' ? 'success' : 'danger'" 
+            size="small"
+            effect="plain"
+          >
+            {{ modelInfo.rerank.status === 'online' ? '在线' : '离线' }}
+          </el-tag>
+        </div>
+      </div>
+      
       <!-- 搜索和筛选 -->
       <div class="search-section tech-card">
         <div class="search-form">
           <el-input
             v-model="searchKeyword"
-            placeholder="搜索知识库条目..."
+            placeholder="搜索标题匹配的条目"
             :prefix-icon="Search"
             class="search-input tech-input"
             @keyup.enter="handleSearch"
@@ -91,23 +127,21 @@
           <div class="list-info">
             <span>共 {{ pagination.total }} 条记录</span>
             <div class="batch-actions">
-              <el-tooltip 
-                content="勾选后将完全清空并重建所有条目的向量索引（仅在未勾选具体条目时生效）" 
-                placement="top"
+              <el-button 
+                v-if="selectedItems.length === 0"
+                type="warning"
+                :icon="Refresh"
+                :loading="rebuildingIndex"
+                @click="handleRebuildIndex"
+                class="tech-button"
               >
-                <el-checkbox 
-                  v-model="forceRebuildVectors" 
-                  class="mr-3"
-                  :disabled="syncingAllVectors || selectedItems.length > 0"
-                >
-                  重建向量索引
-                </el-checkbox>
-              </el-tooltip>
+                重建向量索引
+              </el-button>
               <el-button 
                 type="primary"
                 :icon="Refresh"
-                :loading="syncingAllVectors"
-                @click="handleBatchSync"
+                :loading="syncingVectors"
+                @click="handleSyncVectors"
                 class="tech-button"
               >
                 {{ selectedItems.length > 0 ? `批量同步向量 (${selectedItems.length})` : '同步向量' }}
@@ -454,17 +488,49 @@ import {
   UploadFilled,
   Refresh,
   CircleCheck,
-  Warning
+  Warning,
+  Document,
+  Sort,
+  ChatDotSquare,
+  Grid
 } from '@element-plus/icons-vue'
 import { formatToBeijingTime } from '@/utils/dateFormatter'
 import PageContainer from '@/components/PageContainer.vue'
 import LoadingSpinner from '@/components/LoadingSpinner.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import TextProcessor from '@/components/TextProcessor.vue'
+import { getModelInfo } from '@/api/knowledge'
 
 const knowledgeStore = useKnowledgeStore()
 const authStore = useAuthStore()
 const router = useRouter()
+
+// 模型信息
+const modelInfo = ref(null)
+const loadingModelInfo = ref(false)
+
+// 获取模型信息
+const fetchModelInfo = async () => {
+  try {
+    loadingModelInfo.value = true
+    console.log('🔍 开始获取模型信息...')
+    const data = await getModelInfo()
+    console.log('📦 API返回数据:', data)
+    
+    if (data) {
+      modelInfo.value = data
+      console.log('✅ 模型信息加载成功:', modelInfo.value)
+    } else {
+      console.warn('⚠️ API返回空数据')
+    }
+  } catch (error) {
+    console.error('❌ 获取模型信息失败:', error)
+    console.error('错误详情:', error.response?.data || error.message)
+    // 静默失败，不影响页面其他功能
+  } finally {
+    loadingModelInfo.value = false
+  }
+}
 
 // 搜索和筛选
 const searchKeyword = ref('')
@@ -480,8 +546,8 @@ const pagination = computed(() => knowledgeStore.pagination)
 const selectedItems = ref([])
 
 // 向量同步状态
-const forceRebuildVectors = ref(false)
-const syncingAllVectors = ref(false)
+const syncingVectors = ref(false)
+const rebuildingIndex = ref(false)
 
 // 对话框状态
 const showCreateDialog = ref(false)
@@ -772,71 +838,87 @@ const handleSubmit = async () => {
   }
 }
 
-// 批量向量同步（选中条目或全量同步）
-const handleBatchSync = async () => {
+// 重建向量索引（独立功能）
+const handleRebuildIndex = async () => {
   try {
-    // 如果勾选了"强制重建"且没有选中特定条目，执行完全重建
-    if (forceRebuildVectors.value && selectedItems.value.length === 0) {
+    await ElMessageBox.confirm(
+      '<p style="line-height: 1.6;">警告：此操作将清空并重建所有向量索引。</p>' +
+      '<p style="line-height: 1.6; margin-top: 12px;">此过程可能需要较长时间，确定要继续吗？</p>',
+      '确认重建向量索引',
+      {
+        confirmButtonText: '确认重建',
+        cancelButtonText: '取消',
+        type: 'warning',
+        dangerouslyUseHTMLString: true
+      }
+    )
+    
+    rebuildingIndex.value = true
+    
+    const params = {
+      rebuild_index: true,
+      only_unprocessed: false,
+      force_resync: false
+    }
+    
+    const result = await knowledgeStore.batchSyncVectorsForItems(params)
+    
+    ElMessage.success({
+      message: result.message || '向量索引重建完成',
+      duration: 5000
+    })
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('重建向量索引失败:', error)
+      ElMessage.error('重建失败，请查看控制台')
+    }
+  } finally {
+    rebuildingIndex.value = false
+  }
+}
+
+// 批量同步向量（选中条目或未向量化的条目）
+const handleSyncVectors = async () => {
+  try {
+    // 如果有选中的条目，同步选中的条目
+    if (selectedItems.value.length > 0) {
       await ElMessageBox.confirm(
-        '⚠️ 警告：此操作将完全清空并重建向量索引！\n\n' +
-        '• 将删除所有现有向量数据\n' +
-        '• 重新为所有知识库条目生成向量\n' +
-        '• 彻底解决垃圾向量问题\n' +
-        '• 此过程可能需要较长时间\n\n' +
-        '确定要继续吗？',
-        '完全重建向量索引',
+        `<p style="line-height: 1.6;">确定要同步选中的 ${selectedItems.value.length} 个条目吗？</p>`,
+        '确认批量同步',
         {
-          confirmButtonText: '确认重建',
+          confirmButtonText: '确认同步',
           cancelButtonText: '取消',
-          type: 'warning',
-          dangerouslyUseHTMLString: false
+          type: 'info',
+          dangerouslyUseHTMLString: true
         }
       )
       
-      syncingAllVectors.value = true
+      syncingVectors.value = true
       
+      const ids = selectedItems.value.map(item => item.id)
       const params = {
-        rebuild_index: true,  // 关键参数：触发完全重建
+        ids: ids,
         only_unprocessed: false,
         force_resync: false
       }
       
-      const result = await knowledgeStore.batchSyncVectorsForItems(params)
-      // ✅ batchSyncVectorsForItems 内部已经调用了 fetchStats()，无需重复调用
-      
-      ElMessage.success({
-        message: result.message || '向量索引重建完成',
-        duration: 5000
-      })
-      
-      return
-    }
-    
-    // 如果有选中的条目，同步选中的条目
-    if (selectedItems.value.length > 0) {
-      const ids = selectedItems.value.map(item => item.id)
-      const params = {
-        ids: ids,
-        only_unprocessed: !forceRebuildVectors.value,
-        force_resync: forceRebuildVectors.value
-      }
-      
-      // 🎯 批量同步是常规维护操作，直接执行
       await knowledgeStore.batchSyncVectorsForItems(params)
       selectedItems.value = []
+      ElMessage.success('选中条目同步完成')
     } else {
       // 如果没有选中条目，同步所有未向量化的条目
-      syncingAllVectors.value = true
-      
       await ElMessageBox.confirm(
-        '确定要同步所有未向量化的条目吗？',
-        '批量向量同步',
+        '<p style="line-height: 1.6;">确定要同步所有未向量化的条目吗？</p>',
+        '确认同步向量',
         {
           confirmButtonText: '确认同步',
           cancelButtonText: '取消',
-          type: 'info'
+          type: 'info',
+          dangerouslyUseHTMLString: true
         }
       )
+      
+      syncingVectors.value = true
       
       const params = {
         only_unprocessed: true,
@@ -844,17 +926,15 @@ const handleBatchSync = async () => {
       }
       
       const result = await knowledgeStore.batchSyncVectorsForItems(params)
-      // ✅ batchSyncVectorsForItems 内部已经调用了 fetchStats()，无需重复调用
-      
       ElMessage.success(result.message || '向量同步完成')
     }
   } catch (error) {
-    // 用户取消或同步失败
     if (error !== 'cancel') {
-      console.error('批量向量同步失败:', error)
+      console.error('向量同步失败:', error)
+      ElMessage.error('同步失败，请查看控制台')
     }
   } finally {
-    syncingAllVectors.value = false
+    syncingVectors.value = false
   }
 }
 
@@ -900,6 +980,9 @@ const stopStatsPolling = () => {
 
 // 初始化
 onMounted(async () => {
+  // 加载模型信息
+  await fetchModelInfo()
+  
   await knowledgeStore.fetchKnowledgeList()
   await knowledgeStore.fetchStats()
   console.log('🎯 Knowledge.vue - Stats after fetch:', knowledgeStore.stats)
@@ -953,6 +1036,58 @@ onUnmounted(() => {
 
 .stat-value.not-vectorized {
   color: var(--warning-color);
+}
+
+/* AI模型信息横向卡片 */
+.model-info-bar {
+  padding: var(--space-lg) var(--space-xl);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: var(--space-xl);
+  background: var(--bg-color);
+  border: 1px solid var(--border-dark);
+  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-lg);
+}
+
+.model-info-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex: 1;
+}
+
+.model-label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-weight: var(--font-medium);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.model-value {
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  font-family: 'Monaco', 'Menlo', 'Consolas', 'Courier New', monospace;
+  white-space: nowrap;
+}
+
+.model-dimension {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  margin-left: auto;
+}
+
+.model-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border-dark);
+  flex-shrink: 0;
+  opacity: 0.6;
 }
 
 /* 向量同步区域 */
@@ -1350,6 +1485,30 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
+  .model-info-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-md);
+    padding: var(--space-md);
+  }
+  
+  .model-info-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+  }
+  
+  .model-divider {
+    display: none;
+  }
+  
+  .model-dimension {
+    margin-left: 0;
+  }
+  
   .search-form {
     flex-direction: column;
     align-items: stretch;

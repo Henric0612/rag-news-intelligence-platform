@@ -120,8 +120,15 @@ class Config:
     
     # 爬虫配置
     CRAWLER_USER_AGENT = 'Mozilla/5.0 (compatible; XU-News-Bot/1.0)'
-    CRAWLER_TIMEOUT = 10
+    CRAWLER_TIMEOUT = 30
     CRAWLER_MAX_RETRIES = 3
+    CRAWLER_DELAY_BETWEEN_REQUESTS = 1  # 请求间延迟（秒）
+    
+    # RSS内容质量配置
+    RSS_MIN_CONTENT_LENGTH = int(os.environ.get('RSS_MIN_CONTENT_LENGTH', 200))  # 最小内容长度阈值
+    RSS_ENABLE_FULL_TEXT_FETCH = os.environ.get('RSS_ENABLE_FULL_TEXT_FETCH', 'true').lower() == 'true'  # 启用完整文本抓取
+    RSS_FULL_TEXT_FETCH_TIMEOUT = int(os.environ.get('RSS_FULL_TEXT_FETCH_TIMEOUT', 15))  # 完整文本抓取超时
+    RSS_SHORT_PAGE_THRESHOLD = int(os.environ.get('RSS_SHORT_PAGE_THRESHOLD', 150))  # 短页面判断阈值（避免过度爬取）
     
     # 邮件配置
     SMTP_SERVER = os.environ.get('SMTP_SERVER', 'smtp.gmail.com')

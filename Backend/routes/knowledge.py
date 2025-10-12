@@ -238,3 +238,61 @@ def batch_sync_vectors():
         return error_response(str(e), 400)
     except Exception as e:
         return error_response(f'批量同步失败: {str(e)}', 500)
+
+
+@knowledge_bp.route('/model-info', methods=['GET'])
+@jwt_required()
+def get_model_info():
+    """获取当前使用的AI模型信息"""
+    try:
+        from flask import current_app
+        from Backend.services.vector_service import get_vector_service
+        from Backend.services.search_service import get_search_service
+        
+        # 获取配置信息
+        embedding_model = current_app.config.get('EMBEDDING_MODEL', 'sentence-transformers/all-MiniLM-L6-v2')
+        rerank_model = current_app.config.get('RERANK_MODEL', 'cross-encoder/ms-marco-MiniLM-L-6-v2')
+        llm_model = current_app.config.get('LLM_MODEL', 'qwen3:8b')
+        vector_dimension = current_app.config.get('VECTOR_DIMENSION', 384)
+        
+        # 获取向量服务统计信息
+        vector_service = get_vector_service()
+        vector_stats = vector_service.get_index_stats() if vector_service else {}
+        
+        # 检查重排模型状态
+        search_service = get_search_service()
+        rerank_available = search_service.rerank_model is not None if search_service else False
+        
+        model_info = {
+            'embedding': {
+                'name': embedding_model,
+                'display_name': embedding_model.split('/')[-1] if '/' in embedding_model else embedding_model,
+                'dimension': vector_dimension,
+                'status': 'online' if vector_service and vector_service.embedding_model else 'offline',
+                'description': '用于将文本转换为向量表示，支持语义搜索',
+                'type': 'embedding'
+            },
+            'rerank': {
+                'name': rerank_model,
+                'display_name': rerank_model.split('/')[-1] if '/' in rerank_model else rerank_model,
+                'status': 'online' if rerank_available else 'offline',
+                'description': '用于对搜索结果进行重新排序，提升结果准确性',
+                'type': 'rerank'
+            },
+            'llm': {
+                'name': llm_model,
+                'display_name': llm_model,
+                'status': 'online',
+                'description': '用于生成问答响应的大语言模型',
+                'type': 'generation'
+            },
+            'vector_stats': {
+                'total_vectors': vector_stats.get('total_vectors', 0),
+                'index_type': vector_stats.get('index_type', 'IndexFlatIP')
+            }
+        }
+        
+        return success_response(model_info)
+        
+    except Exception as e:
+        return error_response(f'获取模型信息失败: {str(e)}', 500)

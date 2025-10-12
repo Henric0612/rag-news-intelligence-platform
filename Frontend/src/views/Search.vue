@@ -56,6 +56,72 @@
         />
       </div>
     </div>
+    
+    <!-- 知识条目详情对话框 -->
+    <el-dialog
+      v-model="showDetailDialog"
+      title="知识条目详情"
+      width="800px"
+      class="tech-modal"
+    >
+      <div v-if="viewingItem" class="knowledge-detail">
+        <div class="detail-header">
+          <h3>{{ viewingItem.title }}</h3>
+          <div class="detail-meta">
+            <el-tag v-if="viewingItem.category" :type="getCategoryType(viewingItem.category)" size="small">
+              {{ getCategoryLabel(viewingItem.category) }}
+            </el-tag>
+            <el-tag v-if="viewingItem.source_type" :type="getSourceType(viewingItem.source_type)" size="small">
+              {{ getSourceTypeLabel(viewingItem.source_type) }}
+            </el-tag>
+            <span class="detail-time">{{ formatDate(viewingItem.created_at) }}</span>
+          </div>
+        </div>
+        
+        <div class="detail-content">
+          <h4>内容：</h4>
+          <div class="content-display">
+            <pre class="content-text">{{ viewingItem.content }}</pre>
+          </div>
+        </div>
+        
+        <div class="quality-metrics">
+          <h4>质量评估：</h4>
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-label">总体评分</div>
+              <div class="metric-value">
+                <el-tag 
+                  :type="getQualityTagType(viewingItem.quality_score)"
+                  size="large"
+                >
+                  {{ viewingItem.quality_score || 0 }}分
+                </el-tag>
+              </div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">文本长度</div>
+              <div class="metric-value">{{ viewingItem.content?.length || 0 }} 字符</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">质量等级</div>
+              <div class="metric-value">
+                <el-tag :type="getQualityTagType(viewingItem.quality_score)" size="small">
+                  {{ getQualityLevel(viewingItem.quality_score) }}
+                </el-tag>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div v-if="viewingItem.source_url" class="detail-source">
+          <h4>来源：</h4>
+          <a :href="viewingItem.source_url" target="_blank" class="source-link">
+            {{ viewingItem.source_url }}
+          </a>
+        </div>
+      </div>
+    </el-dialog>
   </PageContainer>
 </template>
 
@@ -140,9 +206,21 @@ const switchMode = async (mode) => {
 }
 
 // 处理结果点击
-const handleResultClick = (result) => {
-  // 可以打开详情页面或显示更多信息
-  ElMessage.info(`查看详情: ${result.title}`)
+// 详情对话框状态
+const showDetailDialog = ref(false)
+const viewingItem = ref(null)
+
+const handleResultClick = async (result) => {
+  try {
+    // 获取完整的知识库条目详情
+    const { getKnowledgeDetail } = await import('@/api/knowledge')
+    const fullItem = await getKnowledgeDetail(result.id)
+    viewingItem.value = fullItem
+    showDetailDialog.value = true
+  } catch (error) {
+    console.error('获取详情失败:', error)
+    ElMessage.error('获取详情失败')
+  }
 }
 
 // 处理分页变化
@@ -180,6 +258,79 @@ const handleSourceClick = (source) => {
   } else {
     ElMessage.info(`来源: ${source.title}`)
   }
+}
+
+// 辅助函数 - 类别标签类型
+const getCategoryType = (category) => {
+  const typeMap = {
+    'tech': 'primary',
+    'business': 'success',
+    'society': 'warning',
+    'entertainment': 'danger',
+    'sports': 'info'
+  }
+  return typeMap[category] || 'info'
+}
+
+// 辅助函数 - 类别标签文本
+const getCategoryLabel = (category) => {
+  const labelMap = {
+    'tech': '科技',
+    'business': '商业',
+    'society': '社会',
+    'entertainment': '娱乐',
+    'sports': '体育'
+  }
+  return labelMap[category] || category
+}
+
+// 辅助函数 - 来源类型标签
+const getSourceType = (sourceType) => {
+  const typeMap = {
+    'rss': 'success',
+    'upload': 'primary',
+    'crawler': 'warning'
+  }
+  return typeMap[sourceType] || 'info'
+}
+
+// 辅助函数 - 来源类型文本
+const getSourceTypeLabel = (sourceType) => {
+  const labelMap = {
+    'rss': 'RSS订阅',
+    'upload': '手动上传',
+    'crawler': '网页爬虫'
+  }
+  return labelMap[sourceType] || sourceType
+}
+
+// 辅助函数 - 质量标签类型
+const getQualityTagType = (score) => {
+  if (score >= 80) return 'success'
+  if (score >= 60) return 'primary'
+  if (score >= 40) return 'warning'
+  return 'danger'
+}
+
+// 辅助函数 - 质量等级
+const getQualityLevel = (score) => {
+  if (score >= 80) return '良好'
+  if (score >= 60) return '中等'
+  if (score >= 40) return '一般'
+  return '较差'
+}
+
+// 辅助函数 - 格式化日期
+const formatDate = (dateString) => {
+  if (!dateString) return '-'
+  const date = new Date(dateString)
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }
 
 onMounted(() => {
@@ -275,6 +426,106 @@ onMounted(() => {
 .dark .mode-tabs {
   background: #2d2d2d;
   border-bottom-color: #4c4d4f;
+}
+
+/* 知识条目详情样式 */
+.knowledge-detail {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.detail-header {
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.detail-header h3 {
+  margin: 0 0 var(--space-sm) 0;
+  font-size: 1.25em;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.detail-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.detail-time {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.detail-content,
+.quality-metrics,
+.detail-source {
+  margin-bottom: var(--space-lg);
+}
+
+.detail-content h4,
+.quality-metrics h4,
+.detail-source h4 {
+  margin: 0 0 var(--space-sm) 0;
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.content-display {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  border: 1px solid var(--border-color);
+}
+
+.content-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-md);
+}
+
+.metric-card {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  border: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.metric-label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+.metric-value {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.source-link {
+  color: var(--color-primary);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.source-link:hover {
+  text-decoration: underline;
 }
 
 .dark .mode-tab {

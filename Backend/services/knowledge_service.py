@@ -152,19 +152,13 @@ class KnowledgeService:
         if filters.get('status'):
             query = query.filter_by(status=filters['status'])
         
-        # 关键词搜索（支持标题、内容、摘要）
+        # 关键词搜索（仅搜索标题）
         keyword = filters.get('keyword', '').strip()
         if keyword:
             # 使用 ilike 进行大小写不敏感的模糊搜索
             search_pattern = f'%{keyword}%'
-            query = query.filter(
-                db.or_(
-                    KnowledgeItem.title.ilike(search_pattern),
-                    KnowledgeItem.content.ilike(search_pattern),
-                    KnowledgeItem.summary.ilike(search_pattern)
-                )
-            )
-            logger.info(f"应用关键词搜索: {keyword}")
+            query = query.filter(KnowledgeItem.title.ilike(search_pattern))
+            logger.info(f"应用标题关键词搜索: {keyword}")
         
         # 排序
         query = query.order_by(KnowledgeItem.created_at.desc())

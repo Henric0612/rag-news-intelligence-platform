@@ -227,9 +227,15 @@ data/raw/
 data/processed/
 datasets/
 *.csv
-*.json
 *.jsonl
 *.parquet
+
+# 项目特定：保留配置文件，忽略数据文件
+Backend/data/faiss/*.index
+Backend/data/faiss/*.json
+Backend/data/faiss/*.backup
+Backend/data/sqlite/*.db
+Backend/data/uploads/*
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -241,6 +247,9 @@ datasets/
 # 上传文件
 uploads/
 static/uploads/
+
+# Flask instance 文件夹（运行时生成的数据库等）
+Backend/instance/
 
 # 临时文件
 temp/
@@ -298,3 +307,20 @@ credentials/
 # 内存转储
 *.dmp
 *.core
+
+# ========================================
+# 项目特定补充规则
+# ========================================
+# Python 缓存
+**/__pycache__/
+
+# pytest 缓存
+.pytest_cache/
+
+# 开发时的临时脚本（如果有）
+*_temp.py
+*_test_local.py
+
+# 本地配置覆盖
+config.local.py
+settings.local.py

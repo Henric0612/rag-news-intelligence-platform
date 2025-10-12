@@ -51,7 +51,7 @@
                   >
                     <span class="source-title">{{ source.title }}</span>
                     <span class="source-relevance">
-                      相关度: {{ formatRelevance(source.score || source.relevance) }}
+                      相关度: {{ formatRelevance(source.similarity_score || source.score || source.relevance) }}
                     </span>
                   </div>
                 </div>

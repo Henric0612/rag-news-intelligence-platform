@@ -357,7 +357,7 @@ class KnowledgeService:
             rebuild_index: 完全重建向量索引（清空后重建）
         """
         try:
-            # 如果是完全重建模式
+            # 如果是完全重建模式（清空所有并重建）
             if rebuild_index:
                 logger.info("🔄 开始完全重建向量索引...")
                 
@@ -381,6 +381,12 @@ class KnowledgeService:
                 logger.info("📝 步骤 3/3: 重新生成所有向量...")
                 # 继续执行后续的向量化逻辑
             
+            # 🔥 新增逻辑：如果指定了 item_ids，自动启用完全重建模式（先删除再生成）
+            is_selected_items_rebuild = False
+            if item_ids is not None and len(item_ids) > 0 and not rebuild_index:
+                is_selected_items_rebuild = True
+                logger.info(f"🔄 检测到已勾选 {len(item_ids)} 个条目，启用完全重建模式（先删除旧向量，再生成新向量）")
+            
             # 构建查询
             query = KnowledgeItem.query
             
@@ -388,8 +394,8 @@ class KnowledgeService:
             if item_ids is not None and len(item_ids) > 0:
                 query = query.filter(KnowledgeItem.id.in_(item_ids))
             
-            # 如果仅处理未向量化的条目（rebuild_index时忽略此条件）
-            if only_unprocessed and not force_resync and not rebuild_index:
+            # 如果仅处理未向量化的条目（rebuild_index或选中条目时忽略此条件）
+            if only_unprocessed and not force_resync and not rebuild_index and not is_selected_items_rebuild:
                 query = query.filter(
                     db.or_(
                         KnowledgeItem.vector_id.is_(None),
@@ -420,13 +426,16 @@ class KnowledgeService:
             
             for item in items:
                 try:
-                    # 检查是否需要同步
-                    if not force_resync and item.vector_id is not None:
+                    # 🔥 修改逻辑：勾选条目时强制重建，不再跳过已有向量的条目
+                    should_rebuild = force_resync or is_selected_items_rebuild or rebuild_index
+                    
+                    # 只有在非重建模式下才会跳过已有向量
+                    if not should_rebuild and item.vector_id is not None:
                         skipped_count += 1
                         continue
                     
-                    # 如果是强制重新同步，先删除旧向量并清空 vector_id
-                    if force_resync and item.vector_id is not None:
+                    # 如果条目已有向量，先删除旧向量
+                    if item.vector_id is not None:
                         old_vector_id = item.vector_id
                         try:
                             # 先将数据库中的 vector_id 设为 None，避免唯一性约束冲突
@@ -434,9 +443,9 @@ class KnowledgeService:
                             db.session.flush()
                             # 然后删除向量映射
                             vector_service.delete_document(old_vector_id)
-                            logger.info(f"删除旧向量 {old_vector_id} (强制重新同步)")
+                            logger.info(f"✅ 删除条目 {item.id} 的旧向量 {old_vector_id}（完全重建模式）")
                         except Exception as e:
-                            logger.warning(f"删除旧向量失败: {str(e)}")
+                            logger.warning(f"⚠️  删除旧向量失败: {str(e)}，将继续创建新向量")
                     
                     # 创建新向量
                     vector_id = vector_service.add_document(item.id, item.content)
@@ -450,19 +459,21 @@ class KnowledgeService:
                     db.session.commit()
                     
                     synced_count += 1
-                    logger.info(f"知识库条目 {item.id} 向量同步成功，vector_id: {vector_id}")
+                    logger.info(f"✅ 知识库条目 {item.id} 向量重建成功，新 vector_id: {vector_id}")
                     
                 except Exception as e:
                     failed_count += 1
                     error_msg = f"ID {item.id}: {str(e)}"
                     errors.append(error_msg)
-                    logger.error(f"条目 {item.id} 向量同步失败: {str(e)}")
+                    logger.error(f"❌ 条目 {item.id} 向量重建失败: {str(e)}")
                     # 回滚当前条目的更改
                     db.session.rollback()
             
-            # 根据是否为重建模式生成不同的消息
+            # 根据模式生成不同的消息
             if rebuild_index:
                 message = f'向量索引重建完成：成功 {synced_count} 条，失败 {failed_count} 条'
+            elif is_selected_items_rebuild:
+                message = f'选中条目向量重建完成：成功 {synced_count} 条，失败 {failed_count} 条'
             else:
                 message = f'批量同步完成：成功 {synced_count} 条，失败 {failed_count} 条，跳过 {skipped_count} 条'
             
@@ -474,7 +485,7 @@ class KnowledgeService:
                 'failed': failed_count,
                 'skipped': skipped_count,
                 'errors': errors,
-                'rebuild_mode': rebuild_index
+                'rebuild_mode': rebuild_index or is_selected_items_rebuild
             }
             
             logger.info(f"批量向量同步完成: {result['message']}")

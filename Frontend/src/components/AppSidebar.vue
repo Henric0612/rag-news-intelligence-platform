@@ -70,11 +70,6 @@ const menuRoutes = [
     meta: { title: '数据采集', icon: 'Download' }
   },
   {
-    path: '/upload',
-    name: 'FileUpload',
-    meta: { title: '文件上传', icon: 'Upload' }
-  },
-  {
     path: '/health',
     name: 'Health',
     meta: { title: '系统健康', icon: 'Monitor' }

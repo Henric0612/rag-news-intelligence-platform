@@ -96,15 +96,6 @@ const routes = [
         }
       },
       {
-        path: 'upload',
-        name: 'FileUpload',
-        component: lazyLoad('FileUpload'),
-        meta: { 
-          title: '文件上传',
-          icon: 'Upload'
-        }
-      },
-      {
         path: 'health',
         name: 'Health',
         component: lazyLoad('Health'),

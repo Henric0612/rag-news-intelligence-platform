@@ -89,8 +89,9 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
       loading.value = true
       const response = await createKnowledge(data)
       
-      // 刷新列表
+      // 刷新列表和统计数据
       await fetchKnowledgeList()
+      await fetchStats()
       
       ElMessage.success('创建成功')
       return response
@@ -144,6 +145,9 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
         currentKnowledge.value = null
       }
       
+      // 🔄 删除后立即刷新统计数据
+      await fetchStats()
+      
       ElMessage.success('删除成功')
     } catch (error) {
       console.error('删除知识库条目失败:', error)
@@ -162,6 +166,9 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
       // 从列表中移除
       knowledgeList.value = knowledgeList.value.filter(item => !ids.includes(item.id))
       pagination.value.total -= ids.length
+      
+      // 🔄 批量删除后立即刷新统计数据
+      await fetchStats()
       
       ElMessage.success(`成功删除 ${ids.length} 个条目`)
     } catch (error) {
@@ -234,6 +241,9 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
         currentKnowledge.value.status = 'processed'
       }
       
+      // 🔄 向量同步成功后立即刷新统计数据
+      await fetchStats()
+      
       ElMessage.success(response.message || '向量同步成功')
       return response
     } catch (error) {
@@ -251,8 +261,9 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
       loading.value = true
       const response = await batchSyncVectors(params)
       
-      // 刷新列表以获取最新状态
+      // 刷新列表和统计数据以获取最新状态
       await fetchKnowledgeList()
+      await fetchStats()
       
       ElMessage.success(response.message || '批量同步完成')
       return response

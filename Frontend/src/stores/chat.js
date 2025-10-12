@@ -130,8 +130,6 @@ export const useChatStore = defineStore('chat', () => {
         const knowledgeUsed = actualData.knowledge_used !== undefined ? actualData.knowledge_used : false
         const webSearchUsed = actualData.web_search_used !== undefined ? actualData.web_search_used : false
         
-        console.log('解析后的标识:', { knowledgeUsed, webSearchUsed })
-        
         // 使用打字机效果逐字显示答案
         await typewriterEffect(
           fullAnswer, 

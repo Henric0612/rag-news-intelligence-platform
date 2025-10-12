@@ -28,6 +28,7 @@ class FileService:
     # 支持的文件类型
     SUPPORTED_EXTENSIONS = {
         '.txt': 'text/plain',
+        '.md': 'text/markdown',
         '.pdf': 'application/pdf',
         '.doc': 'application/msword',
         '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -257,6 +258,8 @@ class FileService:
             
             if file_ext == '.txt':
                 content = self._extract_txt_content(file_path)
+            elif file_ext == '.md':
+                content = self._extract_markdown_content(file_path)
             elif file_ext == '.pdf':
                 content = self._extract_pdf_content(file_path)
             elif file_ext in ['.doc', '.docx']:
@@ -314,6 +317,34 @@ class FileService:
                 
         except Exception as e:
             logger.error(f"提取TXT内容失败: {str(e)}")
+            return ""
+    
+    def _extract_markdown_content(self, file_path: str) -> str:
+        """提取Markdown文件内容"""
+        try:
+            # Markdown 文件与 TXT 文件处理方式相同，都是纯文本
+            # 检测文件编码
+            with open(file_path, 'rb') as f:
+                raw_data = f.read()
+                encoding_result = chardet.detect(raw_data)
+                encoding = encoding_result.get('encoding', 'utf-8')
+            
+            # 尝试不同的编码
+            encodings = [encoding, 'utf-8', 'gbk', 'gb2312', 'big5']
+            
+            for enc in encodings:
+                try:
+                    with open(file_path, 'r', encoding=enc) as f:
+                        return f.read()
+                except UnicodeDecodeError:
+                    continue
+            
+            # 如果所有编码都失败，使用错误处理
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                return f.read()
+                
+        except Exception as e:
+            logger.error(f"提取Markdown内容失败: {str(e)}")
             return ""
     
     def _extract_pdf_content(self, file_path: str) -> str:

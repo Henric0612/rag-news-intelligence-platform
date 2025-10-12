@@ -4,7 +4,7 @@
       <el-button 
         type="success" 
         :icon="Upload"
-        @click="goToUpload"
+        @click="showUploadDialog = true"
         class="tech-button"
       >
         上传文件
@@ -92,13 +92,13 @@
             <span>共 {{ pagination.total }} 条记录</span>
             <div class="batch-actions">
               <el-tooltip 
-                content="勾选后将完全清空并重建向量索引" 
+                content="勾选后将完全清空并重建所有条目的向量索引（仅在未勾选具体条目时生效）" 
                 placement="top"
               >
                 <el-checkbox 
                   v-model="forceRebuildVectors" 
                   class="mr-3"
-                  :disabled="syncingAllVectors"
+                  :disabled="syncingAllVectors || selectedItems.length > 0"
                 >
                   重建向量索引
                 </el-checkbox>
@@ -110,7 +110,7 @@
                 @click="handleBatchSync"
                 class="tech-button"
               >
-                {{ selectedItems.length > 0 ? `批量同步向量 (${selectedItems.length})` : '同步未同步向量' }}
+                {{ selectedItems.length > 0 ? `批量同步向量 (${selectedItems.length})` : '同步向量' }}
               </el-button>
               <el-button 
                 v-if="selectedItems.length > 0"
@@ -197,7 +197,7 @@
                 {{ formatDate(row.created_at) }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="250" fixed="right">
+            <el-table-column label="操作" width="180" fixed="right">
               <template #default="{ row }">
                 <div class="action-buttons">
                   <el-button 
@@ -208,15 +208,6 @@
                     class="action-btn"
                   >
                     查看
-                  </el-button>
-                  <el-button 
-                    :icon="Refresh"
-                    size="small"
-                    @click="handleSyncVector(row)"
-                    class="action-btn"
-                    :type="row.vector_id != null ? 'info' : 'warning'"
-                  >
-                    同步
                   </el-button>
                   <el-button 
                     type="danger" 
@@ -317,6 +308,69 @@
       </template>
     </el-dialog>
     
+    <!-- 文件上传对话框 -->
+    <el-dialog
+      v-model="showUploadDialog"
+      title="上传文件到知识库"
+      width="700px"
+      class="tech-modal"
+      :close-on-click-modal="false"
+    >
+      <div class="upload-section">
+        <el-upload
+          ref="uploadRef"
+          class="upload-demo"
+          drag
+          name="files"
+          :action="uploadUrl"
+          :headers="uploadHeaders"
+          :before-upload="beforeUpload"
+          :on-success="handleUploadSuccess"
+          :on-error="handleUploadError"
+          :on-progress="handleUploadProgress"
+          :multiple="true"
+          :accept="acceptedFileTypes"
+          :show-file-list="true"
+          :file-list="fileList"
+          :on-remove="handleRemoveFile"
+        >
+          <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+          <div class="el-upload__text">
+            将文件拖到此处，或<em>点击上传</em>
+            <br>
+            <small style="color: #909399; font-size: 12px;">支持单个或多个文件同时上传</small>
+          </div>
+          <template #tip>
+            <div class="el-upload__tip">
+              支持格式：{{ supportedFormatsText }}，单个文件不超过 {{ maxFileSizeMB }}MB
+            </div>
+          </template>
+        </el-upload>
+      </div>
+
+      <!-- 上传进度 -->
+      <div v-if="uploadProgress.length > 0" class="upload-progress-section">
+        <el-divider content-position="left">上传进度</el-divider>
+        <div v-for="progress in uploadProgress" :key="progress.id" class="progress-item">
+          <div class="progress-header">
+            <span class="progress-filename">{{ progress.filename }}</span>
+            <span class="progress-percentage">{{ progress.percentage }}%</span>
+          </div>
+          <el-progress
+            :percentage="progress.percentage"
+            :status="progress.status"
+            :stroke-width="8"
+          />
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="handleCloseUploadDialog" class="tech-button">
+          关闭
+        </el-button>
+      </template>
+    </el-dialog>
+    
     <!-- 查看详情对话框 -->
     <el-dialog
       v-model="showViewDialog"
@@ -386,9 +440,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useKnowledgeStore } from '@/stores/knowledge'
+import { useAuthStore } from '@/stores/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   Plus, 
@@ -396,6 +451,7 @@ import {
   Delete, 
   View, 
   Upload,
+  UploadFilled,
   Refresh,
   CircleCheck,
   Warning
@@ -407,6 +463,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import TextProcessor from '@/components/TextProcessor.vue'
 
 const knowledgeStore = useKnowledgeStore()
+const authStore = useAuthStore()
 const router = useRouter()
 
 // 搜索和筛选
@@ -429,7 +486,22 @@ const syncingAllVectors = ref(false)
 // 对话框状态
 const showCreateDialog = ref(false)
 const showViewDialog = ref(false)
+const showUploadDialog = ref(false)
 const viewingItem = ref(null)
+
+// 文件上传相关
+const uploadRef = ref()
+const uploadProgress = ref([])
+const fileList = ref([])
+
+// 上传配置
+const uploadUrl = computed(() => '/api/upload/files')
+const uploadHeaders = computed(() => ({
+  'Authorization': `Bearer ${authStore.token}`
+}))
+const supportedFormatsText = computed(() => 'TXT, MD, PDF, DOC, DOCX, RTF')
+const maxFileSizeMB = computed(() => 10)
+const acceptedFileTypes = computed(() => '.txt,.md,.pdf,.doc,.docx,.rtf')
 
 // 表单数据
 const formData = reactive({
@@ -516,9 +588,97 @@ const getQualityLevel = (score) => {
   return '较差'
 }
 
-// 跳转到文件上传页面
-const goToUpload = () => {
-  router.push('/upload')
+// 文件上传相关方法
+const beforeUpload = (file) => {
+  // 文件验证
+  const isValidType = acceptedFileTypes.value.split(',').some(type => 
+    file.name.toLowerCase().endsWith(type.replace('.', ''))
+  )
+  
+  if (!isValidType) {
+    ElMessage.error('不支持的文件类型')
+    return false
+  }
+  
+  const isLtMaxSize = file.size / 1024 / 1024 < maxFileSizeMB.value
+  if (!isLtMaxSize) {
+    ElMessage.error(`文件大小不能超过 ${maxFileSizeMB.value}MB`)
+    return false
+  }
+  
+  // 添加到进度跟踪
+  const progressId = Date.now() + Math.random()
+  uploadProgress.value.push({
+    id: progressId,
+    filename: file.name,
+    percentage: 0,
+    status: ''
+  })
+  
+  return true
+}
+
+const handleUploadSuccess = (response, file) => {
+  const progress = uploadProgress.value.find(p => p.filename === file.name)
+  if (progress) {
+    progress.percentage = 100
+    progress.status = 'success'
+  }
+  
+  if (response.success) {
+    ElMessage.success(`文件 ${file.name} 上传成功`)
+    // 刷新知识库列表
+    knowledgeStore.fetchKnowledgeList()
+    knowledgeStore.fetchStats()
+    
+    // 从文件列表中移除已上传成功的文件
+    const index = fileList.value.findIndex(f => f.name === file.name)
+    if (index > -1) {
+      fileList.value.splice(index, 1)
+    }
+  } else {
+    ElMessage.error(response.message || '上传失败')
+  }
+  
+  // 清理进度
+  setTimeout(() => {
+    const index = uploadProgress.value.findIndex(p => p.filename === file.name)
+    if (index > -1) {
+      uploadProgress.value.splice(index, 1)
+    }
+  }, 2000)
+}
+
+const handleUploadError = (error, file) => {
+  const progress = uploadProgress.value.find(p => p.filename === file.name)
+  if (progress) {
+    progress.status = 'exception'
+  }
+  
+  console.error('上传失败:', error)
+  ElMessage.error(`文件 ${file.name} 上传失败`)
+}
+
+const handleRemoveFile = (file) => {
+  // 从文件列表中移除
+  const index = fileList.value.findIndex(f => f.uid === file.uid)
+  if (index > -1) {
+    fileList.value.splice(index, 1)
+  }
+}
+
+const handleUploadProgress = (event, file) => {
+  const progress = uploadProgress.value.find(p => p.filename === file.name)
+  if (progress) {
+    progress.percentage = Math.round(event.percent)
+  }
+}
+
+const handleCloseUploadDialog = () => {
+  showUploadDialog.value = false
+  // 清理上传状态
+  uploadProgress.value = []
+  fileList.value = []
 }
 
 // 搜索
@@ -612,28 +772,6 @@ const handleSubmit = async () => {
   }
 }
 
-// 单条目向量同步
-const handleSyncVector = async (item) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要同步"${item.title}"的向量吗？${item.vector_id != null ? '这将重新生成向量。' : ''}`,
-      '确认同步',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'info'
-      }
-    )
-    const forceResync = item.vector_id != null
-    await knowledgeStore.syncVectorForKnowledgeItem(item.id, forceResync)
-  } catch (error) {
-    // 用户取消或同步失败
-    if (error !== 'cancel') {
-      console.error('向量同步失败:', error)
-    }
-  }
-}
-
 // 批量向量同步（选中条目或全量同步）
 const handleBatchSync = async () => {
   try {
@@ -664,7 +802,7 @@ const handleBatchSync = async () => {
       }
       
       const result = await knowledgeStore.batchSyncVectorsForItems(params)
-      await knowledgeStore.fetchStats()
+      // ✅ batchSyncVectorsForItems 内部已经调用了 fetchStats()，无需重复调用
       
       ElMessage.success({
         message: result.message || '向量索引重建完成',
@@ -676,26 +814,6 @@ const handleBatchSync = async () => {
     
     // 如果有选中的条目，同步选中的条目
     if (selectedItems.value.length > 0) {
-      const hasVectorized = selectedItems.value.some(item => item.vector_id != null)
-      const allVectorized = selectedItems.value.every(item => item.vector_id != null)
-      
-      let confirmMessage = `确定要为选中的 ${selectedItems.value.length} 个条目同步向量吗？`
-      if (forceRebuildVectors.value) {
-        confirmMessage += '\n将强制重建所有选中条目的向量索引。'
-      } else if (hasVectorized) {
-        confirmMessage += '\n仅同步未处理的条目。'
-      }
-      
-      await ElMessageBox.confirm(
-        confirmMessage,
-        '批量向量同步',
-        {
-          confirmButtonText: '确认同步',
-          cancelButtonText: '取消',
-          type: 'info'
-        }
-      )
-      
       const ids = selectedItems.value.map(item => item.id)
       const params = {
         ids: ids,
@@ -703,15 +821,16 @@ const handleBatchSync = async () => {
         force_resync: forceRebuildVectors.value
       }
       
+      // 🎯 批量同步是常规维护操作，直接执行
       await knowledgeStore.batchSyncVectorsForItems(params)
       selectedItems.value = []
     } else {
-      // 如果没有选中条目且未勾选强制重建，同步所有未同步的条目
+      // 如果没有选中条目，同步所有未向量化的条目
       syncingAllVectors.value = true
       
       await ElMessageBox.confirm(
-        '确定要同步所有未同步的向量吗？仅处理尚未向量化的条目。',
-        '向量同步',
+        '确定要同步所有未向量化的条目吗？',
+        '批量向量同步',
         {
           confirmButtonText: '确认同步',
           cancelButtonText: '取消',
@@ -725,9 +844,7 @@ const handleBatchSync = async () => {
       }
       
       const result = await knowledgeStore.batchSyncVectorsForItems(params)
-      
-      // 同步完成后刷新统计信息
-      await knowledgeStore.fetchStats()
+      // ✅ batchSyncVectorsForItems 内部已经调用了 fetchStats()，无需重复调用
       
       ElMessage.success(result.message || '向量同步完成')
     }
@@ -752,6 +869,35 @@ const resetForm = () => {
   formRef.value?.resetFields()
 }
 
+// 定期轮询统计数据的定时器
+let statsPollingTimer = null
+
+// 启动统计数据轮询
+const startStatsPolling = () => {
+  // 清除已存在的定时器
+  if (statsPollingTimer) {
+    clearInterval(statsPollingTimer)
+  }
+  
+  // 每30秒轮询一次统计数据
+  statsPollingTimer = setInterval(async () => {
+    try {
+      await knowledgeStore.fetchStats()
+      console.log('🔄 [自动刷新] 统计数据已更新:', knowledgeStore.stats)
+    } catch (error) {
+      console.error('❌ [自动刷新] 统计数据更新失败:', error)
+    }
+  }, 30000) // 30秒
+}
+
+// 停止统计数据轮询
+const stopStatsPolling = () => {
+  if (statsPollingTimer) {
+    clearInterval(statsPollingTimer)
+    statsPollingTimer = null
+  }
+}
+
 // 初始化
 onMounted(async () => {
   await knowledgeStore.fetchKnowledgeList()
@@ -759,6 +905,14 @@ onMounted(async () => {
   console.log('🎯 Knowledge.vue - Stats after fetch:', knowledgeStore.stats)
   console.log('🎯 Knowledge.vue - Vectorized:', knowledgeStore.stats.vectorized)
   console.log('🎯 Knowledge.vue - Not Vectorized:', knowledgeStore.stats.not_vectorized)
+  
+  // 🔄 启动定期轮询统计数据
+  startStatsPolling()
+})
+
+// 组件卸载时清理定时器
+onUnmounted(() => {
+  stopStatsPolling()
 })
 </script>
 
@@ -1211,5 +1365,123 @@ onMounted(async () => {
     gap: var(--space-md);
     align-items: flex-start;
   }
+}
+
+/* 文件上传对话框样式 */
+.upload-tabs {
+  margin-bottom: var(--space-md);
+}
+
+.upload-section {
+  padding: var(--space-lg) 0;
+  min-height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.upload-demo {
+  width: 100%;
+}
+
+.upload-demo :deep(.el-upload-dragger) {
+  width: 100%;
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--el-border-color);
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-secondary);
+  transition: all 0.3s ease;
+}
+
+.upload-demo :deep(.el-upload-dragger:hover) {
+  border-color: var(--primary-color);
+  background-color: var(--el-fill-color-light);
+}
+
+.upload-demo :deep(.el-icon--upload) {
+  font-size: 48px;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-md);
+}
+
+.upload-demo :deep(.el-upload__text) {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+}
+
+.upload-demo :deep(.el-upload__text em) {
+  color: var(--primary-color);
+  font-style: normal;
+}
+
+.upload-demo :deep(.el-upload__tip) {
+  margin-top: var(--space-md);
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.batch-upload {
+  text-align: center;
+  width: 100%;
+}
+
+.batch-upload :deep(.el-upload) {
+  width: 100%;
+}
+
+.batch-upload :deep(.el-button) {
+  width: 200px;
+  height: 50px;
+  font-size: var(--text-base);
+}
+
+.batch-upload :deep(.el-upload__tip) {
+  margin-top: var(--space-md);
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+.batch-upload :deep(.el-upload-list) {
+  margin-top: var(--space-lg);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.upload-progress-section {
+  margin-top: var(--space-lg);
+  padding-top: var(--space-md);
+}
+
+.progress-item {
+  margin-bottom: var(--space-md);
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-xs);
+}
+
+.progress-filename {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-weight: var(--font-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.progress-percentage {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-weight: var(--font-medium);
+  margin-left: var(--space-md);
 }
 </style>

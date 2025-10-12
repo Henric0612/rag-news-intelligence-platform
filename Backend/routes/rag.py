@@ -65,12 +65,22 @@ def ask_question():
         
         if stream:
             # 流式响应
+            from flask import current_app, copy_current_request_context
+            
+            # 保存当前应用的引用
+            app = current_app._get_current_object()
+            
             def generate():
                 try:
-                    for chunk in rag_service.stream_answer(query, user_id, rag_options):
-                        yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                    # 在生成器中确保有应用上下文
+                    with app.app_context():
+                        for chunk in rag_service.stream_answer(query, user_id, rag_options):
+                            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
                 except Exception as e:
-                    error_chunk = {'type': 'error', 'message': str(e)}
+                    logger.error(f"流式响应生成错误: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    error_chunk = {'type': 'error', 'message': f'应用错误: {str(e)}'}
                     yield f"data: {json.dumps(error_chunk, ensure_ascii=False)}\n\n"
             
             return Response(

@@ -47,18 +47,18 @@ class RAGService:
         """初始化 LangChain RAG Chain"""
         try:
             # 创建提示词模板
-            template = """你是一个专业的新闻问答助手。请基于以下新闻内容，准确、客观地回答用户的问题。
+            template = """你是一个专业的智能问答助手。请基于以下知识库内容，准确、客观地回答用户的问题。
 
-新闻内容：
+知识库内容：
 {context}
 
 问题：{question}
 
 请提供详细、准确的回答，并遵循以下要求：
-1. 回答要准确、客观，基于提供的新闻内容
-2. 如果新闻内容不足以回答问题，请明确说明
+1. 回答要准确、客观，基于提供的知识库内容
+2. 如果知识库内容不足以回答问题，请明确说明
 3. 回答要结构清晰，逻辑性强
-4. 可以适当引用新闻内容来支持你的回答
+4. 可以适当引用知识库内容来支持你的回答
 5. 回答要简洁明了，避免冗余信息
 
 回答："""
@@ -229,21 +229,52 @@ class RAGService:
             return 0.5
     
     def stream_answer(self, query: str, user_id: Optional[int] = None, options: Optional[Dict] = None) -> Generator[Dict[str, Any], None, None]:
-        """流式RAG问答"""
+        """流式RAG问答（带思考过程可视化）"""
         try:
+            start_time = time.time()
+            
             # 解析选项
             top_k = options.get('top_k', self.default_top_k) if options else self.default_top_k
             enable_rerank = options.get('enable_rerank', self.enable_rerank) if options else self.enable_rerank
+            enable_web_fallback = options.get('enable_web_fallback', self.enable_web_fallback) if options else self.enable_web_fallback
             
-            # 1. 向量检索
+            # ✅ 阶段1: 发送检索阶段状态
+            logger.info(f"流式RAG开始 - 检索阶段: query={query[:50]}")
+            yield {'type': 'thinking', 'stage': 'retrieval', 'message': '正在搜索知识库...'}
+            
+            # 执行向量检索
             search_results = self.search_service.semantic_search(query, top_k, None, user_id)
             
-            if 'results' not in search_results or not search_results['results']:
-                yield {'type': 'error', 'message': '未找到相关信息'}
-                return
+            # 检查是否需要联网搜索
+            no_knowledge = False
+            web_search_used = False
             
-            # 2. 结果重排（可选）
+            if 'results' not in search_results or not search_results['results']:
+                logger.warning(f"本地搜索无结果: {query}")
+                no_knowledge = True
+                
+                if enable_web_fallback:
+                    logger.info(f"触发联网搜索（流式）: {query}")
+                    yield {'type': 'thinking', 'stage': 'web_search', 'message': '正在联网搜索...'}
+                    
+                    web_results = self.search_service.web_fallback_search(query)
+                    if web_results.get('results'):
+                        search_results = web_results
+                        no_knowledge = False
+                        web_search_used = True
+                        logger.info("使用联网搜索结果（流式）")
+                    else:
+                        yield {'type': 'error', 'message': '未找到相关信息，请尝试其他问题'}
+                        return
+                else:
+                    yield {'type': 'error', 'message': '未找到相关信息'}
+                    return
+            
+            # ✅ 阶段2: 发送重排阶段状态
             if enable_rerank:
+                logger.info(f"流式RAG - 重排阶段")
+                yield {'type': 'thinking', 'stage': 'rerank', 'message': '正在优化搜索结果...'}
+                
                 reranked_results = self.search_service.rerank_results(
                     query, 
                     search_results['results'], 
@@ -251,19 +282,44 @@ class RAGService:
                 )
                 search_results['results'] = reranked_results
             
-            # 3. 构建上下文
+            # 构建上下文
             context = self.build_context(search_results['results'])
             
-            # 4. 流式生成答案
-            yield {'type': 'sources', 'data': search_results['results'][:self.rerank_top_k]}
+            # ✅ 阶段3: 发送生成阶段状态
+            logger.info(f"流式RAG - 生成阶段")
+            yield {'type': 'thinking', 'stage': 'generation', 'message': '正在思考答案...'}
             
+            # ✅ 发送参考来源（带模型信息）
+            sources_data = {
+                'sources': search_results['results'][:self.rerank_top_k],
+                'model': self.llm_service.model_name,
+                'knowledge_used': not web_search_used,
+                'web_search_used': web_search_used
+            }
+            yield {'type': 'sources', 'data': sources_data}
+            
+            # ✅ 流式输出答案内容
             for chunk in self.llm_service.stream_response(query, context, options):
                 yield {'type': 'content', 'data': chunk}
             
-            yield {'type': 'done', 'message': '生成完成'}
+            # ✅ 发送完成信息（带统计数据）
+            total_time = time.time() - start_time
+            yield {
+                'type': 'done', 
+                'message': '生成完成',
+                'stats': {
+                    'response_time': total_time,
+                    'source_count': len(search_results['results'][:self.rerank_top_k]),
+                    'model': self.llm_service.model_name
+                }
+            }
+            
+            logger.info(f"流式RAG完成，总耗时: {total_time:.2f}秒")
             
         except Exception as e:
             logger.error(f"流式RAG失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
             yield {'type': 'error', 'message': str(e)}
     
     def build_context(self, documents: List[Dict]) -> List[Dict]:

@@ -53,8 +53,8 @@
       </div>
     </div>
     
-    <!-- 空状态 -->
-    <div v-else-if="!loading" class="empty-state">
+    <!-- 空状态 - 只在有查询时显示 -->
+    <div v-else-if="!loading && query" class="empty-state">
       <el-empty description="暂无搜索结果">
         <template #image>
           <el-icon size="64" color="#c0c4cc"><Search /></el-icon>

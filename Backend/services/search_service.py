@@ -455,6 +455,12 @@ class SearchService:
         """根据ID获取文档详情"""
         try:
             from Backend.models import db
+            from flask import current_app, has_app_context
+            
+            # 确保在应用上下文中
+            if not has_app_context():
+                logger.warning("无应用上下文，跳过文档查询")
+                return []
             
             query = db.session.query(KnowledgeItem).filter(
                 KnowledgeItem.id.in_(knowledge_ids)
@@ -488,7 +494,13 @@ class SearchService:
         """关键词搜索（支持简单分词，大小写不敏感）"""
         try:
             from Backend.models import db
+            from flask import current_app, has_app_context
             import re
+            
+            # 确保在应用上下文中
+            if not has_app_context():
+                logger.warning("无应用上下文，跳过关键词搜索")
+                return []
             
             # 基础 token 提取：英文/数字 + 连续中文
             english_tokens = re.findall(r"[A-Za-z0-9]+", query.lower())
@@ -599,6 +611,12 @@ class SearchService:
                 return
                 
             from Backend.models import db
+            from flask import current_app, has_app_context
+            
+            # 确保在应用上下文中
+            if not has_app_context():
+                logger.warning("无应用上下文，跳过搜索历史记录")
+                return
             
             search_history = SearchHistory(
                 user_id=user_id,
@@ -619,6 +637,12 @@ class SearchService:
         """从搜索历史获取建议"""
         try:
             from Backend.models import db
+            from flask import current_app, has_app_context
+            
+            # 确保在应用上下文中
+            if not has_app_context():
+                logger.warning("无应用上下文，跳过搜索历史建议")
+                return []
             
             # 获取包含查询词的搜索历史
             suggestions = db.session.query(SearchHistory.query).filter(

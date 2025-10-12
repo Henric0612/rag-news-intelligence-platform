@@ -67,7 +67,7 @@ export const useChatStore = defineStore('chat', () => {
   // ==================== Actions ====================
   
   /**
-   * 发送消息
+   * 发送消息（支持流式输出）
    * @param {string} message - 用户消息
    * @param {object} options - 发送选项
    * @returns {Promise<object>} AI响应消息
@@ -80,53 +80,43 @@ export const useChatStore = defineStore('chat', () => {
     // 添加用户消息
     addUserMessage(message)
     
-    // 设置加载状态
+    // ✅ 启用流式请求
+    const useStreaming = true
+    
+    if (useStreaming) {
+      // 使用真正的流式处理
+      return await sendMessageStream(message, options)
+    } else {
+      // 使用传统的非流式处理（保留作为备用）
+      return await sendMessageNonStream(message, options)
+    }
+  }
+
+  /**
+   * 非流式发送消息（备用方法）
+   */
+  const sendMessageNonStream = async (message, options = {}) => {
     loading.value = true
     
     try {
-      // 调试信息：检查认证状态
-      const token = localStorage.getItem('token')
-      console.log('发送消息时的认证状态:', {
-        hasToken: !!token,
-        tokenPreview: token ? token.substring(0, 20) + '...' : 'null',
-        message: message
-      })
-      
-      // 只发送后端期望的字段
       const requestData = {
         query: message,
         top_k: chatConfig.value.top_k,
         enable_rerank: chatConfig.value.enable_rerank,
-        enable_web_fallback: true,  // ✅ 启用联网查询
-        stream: chatConfig.value.stream,
+        enable_web_fallback: true,
+        stream: false,
         ...options
       }
       
-      console.log('发送RAG请求数据:', requestData)
-      
       const response = await askQuestion(requestData)
-      
-      console.log('收到RAG响应:', response)
-      
-      // 响应拦截器返回 data.data，所以response已经是实际数据
-      // 后端返回格式：{ success: true, code: 200, data: { answer, sources, ... } }
-      // 拦截器处理后：{ answer, sources, response_time, ... }
-      
       let actualData = response
       
-      // 如果response还包含data字段，说明拦截器返回的是整个data对象
       if (response && response.data && typeof response.data === 'object') {
         actualData = response.data
       }
       
-      console.log('实际数据:', actualData)
-      console.log('knowledge_used:', actualData.knowledge_used)
-      console.log('web_search_used:', actualData.web_search_used)
-      
       if (actualData && typeof actualData === 'object' && actualData.answer !== undefined) {
         const fullAnswer = actualData.answer || '抱歉，我无法回答您的问题。'
-        
-        // 后端返回的是下划线命名，需要正确读取
         const knowledgeUsed = actualData.knowledge_used !== undefined ? actualData.knowledge_used : false
         const webSearchUsed = actualData.web_search_used !== undefined ? actualData.web_search_used : false
         
@@ -136,23 +126,19 @@ export const useChatStore = defineStore('chat', () => {
           actualData.sources || [], 
           actualData.response_time || 0, 
           actualData.quality_score || 0,
-          knowledgeUsed,  // 是否使用了知识库
-          webSearchUsed   // 是否使用了联网搜索
+          knowledgeUsed,
+          webSearchUsed,
+          actualData.model || 'unknown'
         )
         
-        // 更新统计信息
         updateStats()
-        
         return messages.value[messages.value.length - 1]
       } else {
-        console.error('AI响应格式错误，响应内容:', response)
-        console.error('实际数据:', actualData)
         throw new Error('AI响应格式错误')
       }
     } catch (error) {
       console.error('发送消息失败:', error)
       
-      // 添加错误消息
       const errorMessage = {
         type: 'ai',
         content: '抱歉，我无法回答您的问题。请稍后重试。',
@@ -168,73 +154,140 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   /**
-   * 流式发送消息
+   * 流式发送消息（真正的SSE实现）
    * @param {string} message - 用户消息
    * @param {object} options - 发送选项
    */
   const sendMessageStream = async (message, options = {}) => {
-    if (!message?.trim()) {
-      throw new Error('消息内容不能为空')
-    }
-
-    // 添加用户消息
-    addUserMessage(message)
-    
     // 设置流式状态
     streaming.value = true
-    streamingContent.value = ''
     
     try {
-      // 只发送后端期望的字段
+      // 获取认证token
+      const token = localStorage.getItem('token')
+      if (!token) {
+        throw new Error('未登录，请先登录')
+      }
+      
+      // 构建请求数据
       const requestData = {
         query: message,
         top_k: chatConfig.value.top_k,
         enable_rerank: chatConfig.value.enable_rerank,
-        enable_web_fallback: false,
-        stream: true,
+        enable_web_fallback: true,
+        stream: true,  // ✅ 启用流式输出
         ...options
       }
       
-      console.log('发送流式RAG请求数据:', requestData)
+      console.log('发送流式RAG请求:', requestData)
       
-      const response = await askQuestion(requestData)
+      // ✅ 创建AI消息对象（用于实时更新）
+      const aiMessage = {
+        type: 'ai',
+        content: '',
+        thinking: true,
+        thinkingStage: 'retrieval',  // 初始阶段
+        sources: [],
+        model: '',
+        knowledgeUsed: true,
+        webSearchUsed: false,
+        responseTime: 0,
+        qualityScore: 0,
+        timestamp: new Date(),
+        isStreaming: true
+      }
       
-      // 处理流式响应
+      // 立即添加到消息列表
+      messages.value.push(aiMessage)
+      const messageIndex = messages.value.length - 1
+      
+      // ✅ 使用Fetch API进行流式请求
+      const response = await fetch('/api/rag/ask', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(requestData)
+      })
+      
+      if (!response.ok) {
+        throw new Error(`请求失败: ${response.status} ${response.statusText}`)
+      }
+      
+      // ✅ 读取流式响应
       const reader = response.body.getReader()
-      const decoder = new TextDecoder()
+      const decoder = new TextDecoder('utf-8')
+      let buffer = ''
       
       while (true) {
         const { done, value } = await reader.read()
         
-        if (done) break
+        if (done) {
+          console.log('流式响应完成')
+          break
+        }
         
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
+        // 解码数据块
+        buffer += decoder.decode(value, { stream: true })
+        
+        // 处理完整的SSE消息（以\n\n分隔）
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || '' // 保留最后不完整的行
         
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             try {
-              const data = JSON.parse(line.slice(6))
+              const jsonStr = line.slice(6).trim()
+              if (!jsonStr) continue
               
-              if (data.type === 'content') {
-                streamingContent.value += data.data
+              const data = JSON.parse(jsonStr)
+              console.log('收到流式数据:', data)
+              
+              // ✅ 处理不同类型的消息
+              if (data.type === 'thinking') {
+                // 更新思考阶段
+                messages.value[messageIndex].thinkingStage = data.stage
+                console.log(`思考阶段: ${data.stage} - ${data.message}`)
+                
               } else if (data.type === 'sources') {
-                // 处理来源信息
+                // 接收参考来源和元信息
+                const sourcesData = data.data
+                messages.value[messageIndex].sources = sourcesData.sources || []
+                messages.value[messageIndex].model = sourcesData.model || 'unknown'
+                messages.value[messageIndex].knowledgeUsed = sourcesData.knowledge_used !== undefined ? sourcesData.knowledge_used : true
+                messages.value[messageIndex].webSearchUsed = sourcesData.web_search_used !== undefined ? sourcesData.web_search_used : false
+                console.log('收到参考来源:', sourcesData)
+                
+              } else if (data.type === 'content') {
+                // 接收答案内容片段
+                messages.value[messageIndex].thinking = false
+                messages.value[messageIndex].content += data.data
+                
               } else if (data.type === 'done') {
-                // 完成，添加最终消息
-                const aiMessage = {
-                  type: 'ai',
-                  content: streamingContent.value,
-                  timestamp: new Date()
+                // 完成
+                messages.value[messageIndex].thinking = false
+                messages.value[messageIndex].isStreaming = false
+                
+                // 设置统计信息
+                if (data.stats) {
+                  messages.value[messageIndex].responseTime = Math.round(data.stats.response_time * 1000) || 0
+                  messages.value[messageIndex].qualityScore = 0.85 // 默认质量评分
                 }
                 
-                addAIMessage(aiMessage)
-                streamingContent.value = ''
+                console.log('流式生成完成')
+                
               } else if (data.type === 'error') {
-                throw new Error(data.message)
+                // 错误处理
+                console.error('流式错误:', data.message)
+                messages.value[messageIndex].thinking = false
+                messages.value[messageIndex].isStreaming = false
+                messages.value[messageIndex].error = true
+                messages.value[messageIndex].content = data.message || '抱歉，生成答案时发生错误。'
               }
+              
             } catch (e) {
-              console.error('解析流式数据失败:', e)
+              console.error('解析流式数据失败:', e, line)
             }
           }
         }
@@ -243,25 +296,39 @@ export const useChatStore = defineStore('chat', () => {
       // 更新统计信息
       updateStats()
       
+      return messages.value[messageIndex]
+      
     } catch (error) {
       console.error('流式发送消息失败:', error)
+      
+      // 添加错误消息
+      const errorMessage = {
+        type: 'ai',
+        content: `抱歉，发生错误: ${error.message}`,
+        error: true,
+        timestamp: new Date()
+      }
+      
+      addAIMessage(errorMessage)
       throw error
+      
     } finally {
       streaming.value = false
     }
   }
 
   /**
-   * 打字机效果显示答案
+   * 打字机效果显示答案（备用方法，用于非流式模式）
    * @param {string} fullAnswer - 完整答案
    * @param {array} sources - 参考来源
    * @param {number} responseTime - 响应时间
    * @param {number} qualityScore - 质量评分
    * @param {boolean} knowledgeUsed - 是否使用了知识库
    * @param {boolean} webSearchUsed - 是否使用了联网搜索
+   * @param {string} model - 模型名称
    */
-  const typewriterEffect = async (fullAnswer, sources, responseTime, qualityScore, knowledgeUsed = true, webSearchUsed = false) => {
-    console.log('打字机效果参数:', { knowledgeUsed, webSearchUsed })
+  const typewriterEffect = async (fullAnswer, sources, responseTime, qualityScore, knowledgeUsed = true, webSearchUsed = false, model = 'unknown') => {
+    console.log('打字机效果参数:', { knowledgeUsed, webSearchUsed, model })
     
     // 创建一个临时消息对象用于逐字显示
     const tempMessage = {
@@ -272,6 +339,7 @@ export const useChatStore = defineStore('chat', () => {
       qualityScore: qualityScore,
       knowledgeUsed: knowledgeUsed,
       webSearchUsed: webSearchUsed,
+      model: model,
       timestamp: new Date(),
       isTyping: true
     }

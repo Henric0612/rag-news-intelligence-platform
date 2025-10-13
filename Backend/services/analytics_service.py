@@ -7,7 +7,8 @@ from typing import List, Dict, Any, Optional
 from collections import Counter
 import numpy as np
 from Backend.models import KnowledgeItem, db
-from Backend.utils.text_utils import extract_keywords, clean_text
+from Backend.utils.text_utils import clean_text
+from Backend.services.keyword_service import get_keyword_service
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,14 @@ class AnalyticsService:
             Dict: 包含Top10关键词和聚类分布的报告
         """
         try:
+            # Check cache first (only if no limit specified - full dataset)
+            if limit is None:
+                from Backend.services.analytics_cache_service import AnalyticsCacheService
+                cached_report = AnalyticsCacheService.get_cached_report()
+                if cached_report:
+                    logger.info("Using cached analytics report (knowledge base unchanged)")
+                    return cached_report
+            
             logger.info("开始生成聚类分析报告")
             
             # 1. 获取知识库数据
@@ -54,41 +63,86 @@ class AnalyticsService:
             
             logger.info(f"获取到 {len(items)} 条知识库数据")
             
-            # 2. 提取所有文档的关键词
+            # 2. 使用 KeyBERT 提取高质量关键词
+            # 初始化统计变量
             all_keywords = []
-            for item in items:
-                # 合并标题和内容
-                text = f"{item.title} {item.content}"
-                keywords = extract_keywords(text, top_k=20)
-                all_keywords.extend(keywords)
+            keyword_freq = Counter()
             
-            # 3. 统计关键词频次，获取Top10
-            keyword_freq = Counter(all_keywords)
-            top_10 = keyword_freq.most_common(10)
+            try:
+                keyword_service = get_keyword_service()
+                
+                # 策略优化：从每篇文章分别提取关键词，然后统计频次
+                # 这样能更好地反映整体主题而非个别文章的长句
+                all_keywords = []
+                
+                for item in items:
+                    # 准备文本：只使用标题（标题包含最核心的主题）
+                    # 避免内容中的长句干扰
+                    text = f"{item.title} {item.title} {item.title}"
+                    
+                    # 从每篇文章只提取2个最核心的关键词
+                    item_keywords = keyword_service.extract_keywords_keybert(
+                        texts=[text],
+                        top_k=2,  # 减少到2个，确保只提取最核心的
+                        diversity=0.9,  # 最高多样性
+                        use_mmr=True
+                    )
+                    
+                    # 收集关键词
+                    if item_keywords:
+                        all_keywords.extend([kw['keyword'] for kw in item_keywords])
+                
+                # 统计关键词频次
+                keyword_freq = Counter(all_keywords)
+                top_10 = keyword_freq.most_common(10)
+                
+                if top_10:
+                    # 计算总频次用于百分比
+                    total_count = sum(count for _, count in top_10)
+                    
+                    top_10_keywords = [
+                        {
+                            'keyword': keyword,
+                            'count': count,
+                            'percentage': round(count / total_count * 100, 2) if total_count > 0 else 0
+                        }
+                        for keyword, count in top_10
+                    ]
+                    
+                    all_keywords = [kw for kw, _ in top_10]
+                else:
+                    top_10_keywords = []
+                
+                logger.info(f"✅ KeyBERT提取Top10关键词: {[k['keyword'] for k in top_10_keywords]}")
+                
+            except Exception as e:
+                logger.error(f"❌ KeyBERT提取失败，使用降级方案: {str(e)}")
+                # 降级到旧方法
+                from Backend.utils.text_utils import extract_keywords
+                all_keywords = []
+                for item in items:
+                    text = f"{item.title} {item.content}"
+                    keywords = extract_keywords(text, top_k=20)
+                    all_keywords.extend(keywords)
+                
+                keyword_freq = Counter(all_keywords)
+                top_10 = keyword_freq.most_common(10)
+                
+                top_10_keywords = [
+                    {
+                        'keyword': keyword,
+                        'count': count,
+                        'percentage': round(count / len(all_keywords) * 100, 2) if all_keywords else 0
+                    }
+                    for keyword, count in top_10
+                ]
+                
+                logger.info(f"降级方案Top10关键词: {[k['keyword'] for k in top_10_keywords]}")
             
-            top_10_keywords = [
-                {
-                    'keyword': keyword,
-                    'count': count,
-                    'percentage': round(count / len(all_keywords) * 100, 2) if all_keywords else 0
-                }
-                for keyword, count in top_10
-            ]
-            
-            logger.info(f"Top10关键词: {[k['keyword'] for k in top_10_keywords]}")
-            
-            # 4. 尝试进行KMeans聚类（如果数据足够多）
-            cluster_info = None
-            if len(items) >= 5:
-                try:
-                    cluster_info = self._perform_clustering(items)
-                except Exception as e:
-                    logger.warning(f"聚类分析失败: {str(e)}")
-            
-            # 5. 按分类统计
+            # 4. 按分类统计
             category_stats = self._get_category_statistics(items)
             
-            # 6. 按来源类型统计
+            # 5. 按来源类型统计
             source_type_stats = self._get_source_type_statistics(items)
             
             report = {
@@ -102,10 +156,13 @@ class AnalyticsService:
                 'timestamp': items[0].created_at.isoformat() if items else None
             }
             
-            if cluster_info:
-                report['clustering'] = cluster_info
-            
             logger.info("聚类分析报告生成完成")
+            
+            # Cache the report (only if no limit - full dataset)
+            if limit is None:
+                from Backend.services.analytics_cache_service import AnalyticsCacheService
+                AnalyticsCacheService.set_cached_report(report)
+            
             return report
             
         except Exception as e:
@@ -116,76 +173,22 @@ class AnalyticsService:
                 'message': '生成分析报告失败'
             }
     
-    def _perform_clustering(self, items: List[KnowledgeItem], n_clusters: int = 5) -> Dict[str, Any]:
-        """
-        执行KMeans聚类分析
-        
-        Args:
-            items: 知识库条目列表
-            n_clusters: 聚类数量
-            
-        Returns:
-            Dict: 聚类结果
-        """
-        try:
-            from sklearn.feature_extraction.text import TfidfVectorizer
-            from sklearn.cluster import KMeans
-            
-            # 准备文本数据
-            texts = [f"{item.title} {item.content[:500]}" for item in items]
-            
-            # 调整聚类数量（不能超过文档数量）
-            n_clusters = min(n_clusters, len(items))
-            
-            # TF-IDF向量化
-            vectorizer = TfidfVectorizer(
-                max_features=100,
-                max_df=0.8,
-                min_df=2,
-                ngram_range=(1, 2)
-            )
-            X = vectorizer.fit_transform(texts)
-            
-            # KMeans聚类
-            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-            clusters = kmeans.fit_predict(X)
-            
-            # 统计每个聚类的文档数量
-            cluster_counts = Counter(clusters)
-            cluster_distribution = [
-                {
-                    'cluster_id': int(cluster_id),
-                    'count': count,
-                    'percentage': round(count / len(items) * 100, 2)
-                }
-                for cluster_id, count in sorted(cluster_counts.items())
-            ]
-            
-            # 提取每个聚类的代表性关键词
-            feature_names = vectorizer.get_feature_names_out()
-            cluster_keywords = {}
-            
-            for i in range(n_clusters):
-                # 获取该聚类的中心点
-                center = kmeans.cluster_centers_[i]
-                # 获取权重最高的前5个特征
-                top_indices = center.argsort()[-5:][::-1]
-                keywords = [feature_names[idx] for idx in top_indices]
-                cluster_keywords[f'cluster_{i}'] = keywords
-            
-            return {
-                'n_clusters': n_clusters,
-                'distribution': cluster_distribution,
-                'cluster_keywords': cluster_keywords,
-                'method': 'KMeans'
-            }
-            
-        except ImportError:
-            logger.warning("scikit-learn未安装，跳过聚类分析")
-            return None
-        except Exception as e:
-            logger.error(f"KMeans聚类失败: {str(e)}")
-            raise
+    
+    def _get_category_label(self, category: str) -> str:
+        """获取分类的中文标签"""
+        labels = {
+            'politics': '政治',
+            'economy': '经济',
+            'technology': '科技',
+            'society': '社会',
+            'culture': '文化',
+            'sports': '体育',
+            'entertainment': '娱乐',
+            'education': '教育',
+            'health': '健康',
+            'military': '军事'
+        }
+        return labels.get(category, category)
     
     def _get_category_statistics(self, items: List[KnowledgeItem]) -> List[Dict[str, Any]]:
         """统计各分类的文档数量"""

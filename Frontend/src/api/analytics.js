@@ -10,7 +10,8 @@ import request from './request'
  * @returns {Promise}
  */
 export const getClusteringAnalysis = (params = {}) => {
-  return request.get('/api/analytics/clustering', { params })
+  // 首次模型预热可能较慢，单独将此接口超时放宽到120秒
+  return request.get('/api/analytics/clustering', { params, timeout: 120000 })
 }
 
 /**

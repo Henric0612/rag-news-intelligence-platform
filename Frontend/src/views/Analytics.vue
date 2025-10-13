@@ -60,38 +60,45 @@
         </div>
       </div>
       
-      <!-- 图表区域 -->
+      <!-- 搜索热词TOP10 -->
       <div class="charts-section">
         <div class="chart-container tech-card">
           <div class="chart-header">
-            <h3>知识库增长趋势</h3>
-            <el-select v-model="timeRange" size="small">
-              <el-option label="最近7天" value="7d" />
-              <el-option label="最近30天" value="30d" />
-              <el-option label="最近90天" value="90d" />
-            </el-select>
-          </div>
-          <div class="chart-placeholder">
-            <el-icon><TrendCharts /></el-icon>
-            <p>图表功能开发中</p>
-          </div>
-        </div>
-        
-        <div class="chart-container tech-card">
-          <div class="chart-header">
-            <h3>搜索热词分析</h3>
+            <h3>搜索热词TOP10</h3>
+            <p class="chart-subtitle">基于知识库内容的关键词分析</p>
             <el-button size="small" :icon="Refresh" @click="refreshHotWords">
               刷新
             </el-button>
           </div>
-          <div class="hot-words">
+          <div class="hot-words-list">
             <div 
+              v-if="hotWords.length === 0 || (hotWords.length === 1 && (hotWords[0].text === '暂无数据' || hotWords[0].text === '加载失败'))"
+              class="empty-keywords"
+            >
+              <el-icon><Document /></el-icon>
+              <p>{{ hotWords[0]?.text || '暂无关键词数据' }}</p>
+            </div>
+            <div 
+              v-else
               v-for="(word, index) in hotWords" 
               :key="index"
-              class="hot-word-item"
-              :style="{ fontSize: `${word.size}px` }"
+              class="keyword-item"
+              :class="{ 'top-three': index < 3 }"
             >
-              {{ word.text }}
+              <div class="keyword-rank">{{ index + 1 }}</div>
+              <div class="keyword-content">
+                <div class="keyword-text">{{ word.text }}</div>
+                <div class="keyword-bar">
+                  <div 
+                    class="keyword-progress" 
+                    :style="{ width: `${word.percentage}%` }"
+                  ></div>
+                </div>
+              </div>
+              <div class="keyword-stats">
+                <span class="keyword-count">{{ word.count }}</span>
+                <span class="keyword-percentage">{{ word.percentage }}%</span>
+              </div>
             </div>
           </div>
         </div>
@@ -240,9 +247,6 @@ const stats = reactive({
   avgResponseTime: 245
 })
 
-// 时间范围
-const timeRange = ref('30d')
-
 // 热词数据（Top10关键词）
 const hotWords = ref([])
 
@@ -267,12 +271,24 @@ const getCategoryLabel = (category) => {
 const loadClusteringData = async () => {
   try {
     loading.value = true
+    
+    // 友好提示：首次加载可能较慢
+    const loadingMessage = ElMessage.info({
+      message: '正在分析知识库数据，首次加载约需1分钟...',
+      duration: 0,  // 不自动关闭
+      showClose: false
+    })
+    
     const response = await getClusteringAnalysis()
+    
+    // 关闭加载提示
+    loadingMessage.close()
     
     console.log('聚类分析API响应:', response)
     
-    // ✅ 响应拦截器已处理，直接使用 response
-    if (response && response.success) {
+    // ✅ 响应拦截器返回的是data.data，直接使用response
+    // 检查是否有数据（响应拦截器已经处理了success判断）
+    if (response && typeof response === 'object') {
       // 更新Top10关键词
       if (response.top_10_keywords && response.top_10_keywords.length > 0) {
         // 将关键词转换为热词显示格式，根据count排序设置字体大小
@@ -303,12 +319,20 @@ const loadClusteringData = async () => {
       
       ElMessage.success('数据加载成功')
     } else {
-      ElMessage.warning(response?.message || '获取分析数据失败')
+      ElMessage.warning('获取分析数据失败：响应格式错误')
       hotWords.value = [{ text: '暂无数据', size: 16 }]
     }
   } catch (error) {
+    // 额外容错：如果是超时，提示用户稍后重试
     console.error('加载聚类分析数据失败:', error)
-    ElMessage.error('加载数据失败: ' + (error.response?.data?.message || error.message))
+    if (error.code === 'ECONNABORTED' || /timeout/i.test(error.message || '')) {
+      ElMessage.error({
+        message: '数据生成较慢已超时，请稍后点击"刷新"重试',
+        duration: 5000
+      })
+    } else {
+      ElMessage.error('加载数据失败: ' + (error.response?.data?.message || error.message))
+    }
     
     // 显示默认数据
     hotWords.value = [{ text: '加载失败', size: 16 }]
@@ -321,8 +345,9 @@ const loadClusteringData = async () => {
 const refreshHotWords = async () => {
   const loadingInstance = ElLoading.service({
     lock: true,
-    text: '正在刷新数据...',
+    text: '正在生成关键词分析，请稍候...',
     background: 'rgba(0, 0, 0, 0.7)',
+    customClass: 'analytics-loading'
   })
   
   try {
@@ -410,7 +435,7 @@ onMounted(async () => {
 
 .charts-section {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: var(--space-lg);
 }
 
@@ -423,6 +448,8 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: var(--space-lg);
+  flex-wrap: wrap;
+  gap: var(--space-sm);
 }
 
 .chart-header h3 {
@@ -432,47 +459,147 @@ onMounted(async () => {
   color: var(--text-primary);
 }
 
-.chart-placeholder {
-  height: 200px;
+.chart-subtitle {
+  flex: 1;
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  padding-left: var(--space-md);
+}
+
+.hot-words-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-height: 200px;
+}
+
+.empty-keywords {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  min-height: 200px;
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
   color: var(--text-tertiary);
 }
 
-.chart-placeholder .el-icon {
+.empty-keywords .el-icon {
   font-size: 48px;
   margin-bottom: var(--space-md);
 }
 
-.hot-words {
+.keyword-item {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
   align-items: center;
-  justify-content: center;
-  min-height: 200px;
-  padding: var(--space-lg);
+  gap: var(--space-md);
+  padding: var(--space-md);
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  border-left: 3px solid transparent;
 }
 
-.hot-word-item {
-  padding: var(--space-sm) var(--space-md);
+.keyword-item:hover {
+  background: var(--bg-tertiary);
+  transform: translateX(4px);
+}
+
+.keyword-item.top-three {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1));
+  border-left-color: var(--primary-color);
+}
+
+.keyword-item.top-three:nth-child(1) {
+  border-left-color: #FFD700;
+}
+
+.keyword-item.top-three:nth-child(2) {
+  border-left-color: #C0C0C0;
+}
+
+.keyword-item.top-three:nth-child(3) {
+  border-left-color: #CD7F32;
+}
+
+.keyword-rank {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: var(--primary-color);
   color: var(--white);
   border-radius: var(--radius-full);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: all var(--transition-fast);
+  font-weight: var(--font-bold);
+  font-size: var(--text-sm);
+  flex-shrink: 0;
 }
 
-.hot-word-item:hover {
-  background: var(--primary-dark);
-  transform: scale(1.05);
+.keyword-item.top-three:nth-child(1) .keyword-rank {
+  background: linear-gradient(135deg, #FFD700, #FFA500);
+}
+
+.keyword-item.top-three:nth-child(2) .keyword-rank {
+  background: linear-gradient(135deg, #C0C0C0, #A8A8A8);
+}
+
+.keyword-item.top-three:nth-child(3) .keyword-rank {
+  background: linear-gradient(135deg, #CD7F32, #B8860B);
+}
+
+.keyword-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.keyword-text {
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--space-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.keyword-bar {
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.keyword-progress {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
+  border-radius: var(--radius-full);
+  transition: width var(--transition-slow);
+}
+
+.keyword-item.top-three .keyword-progress {
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+}
+
+.keyword-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.keyword-count {
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
+  color: var(--primary-color);
+}
+
+.keyword-percentage {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-weight: var(--font-medium);
 }
 
 .category-stats {
@@ -655,16 +782,30 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
-  .charts-section {
-    grid-template-columns: 1fr;
-  }
-  
   .behavior-grid {
     grid-template-columns: 1fr;
   }
   
   .metrics-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .chart-subtitle {
+    padding-left: 0;
+  }
+  
+  .keyword-item {
+    flex-wrap: wrap;
+  }
+  
+  .keyword-stats {
+    flex-direction: row;
+    gap: var(--space-sm);
   }
 }
 </style>

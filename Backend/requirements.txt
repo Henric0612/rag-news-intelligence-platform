@@ -30,6 +30,9 @@ tokenizers>=0.15.0
 # 向量数据库
 faiss-cpu>=1.8.0
 
+# 关键词提取
+keybert>=0.7.0
+
 # LangChain 生态 (RAG框架)
 langchain>=0.1.0
 langchain-community>=0.0.20

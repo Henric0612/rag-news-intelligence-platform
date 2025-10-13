@@ -178,7 +178,11 @@ def calculate_password_strength(password: str) -> int:
 
 
 def extract_keywords(text: str, top_k: int = 10) -> List[str]:
-    """从文本中提取关键词（轻量实现）
+    """从文本中提取关键词（轻量实现 - 降级方案）
+    
+    注意：这是一个简单的频次统计实现，用作降级方案。
+    对于高质量的关键词提取，请使用 Backend.services.keyword_service 中的 KeyBERT 实现。
+    
     - 仅使用正则与简单频次统计，避免额外依赖
     - 适配中英文：按中文字符窗口与英文单词分词的混合策略
     - 过滤编程关键字和技术术语

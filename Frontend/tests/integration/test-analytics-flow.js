@@ -27,20 +27,20 @@ describe('数据分析流程集成测试', () => {
     vi.clearAllMocks()
   })
 
-  describe('Top10关键词分析', () => {
-    it('应该能够获取Top10关键词', async () => {
+  describe('搜索热词TOP10（基于KeyBERT）', () => {
+    it('应该能够获取基于知识库内容的Top10关键词', async () => {
       const mockKeywords = {
         keywords: [
-          { keyword: '人工智能', count: 150, percentage: 15.0 },
-          { keyword: '机器学习', count: 120, percentage: 12.0 },
+          { keyword: '人工智能技术', count: 150, percentage: 15.0 },
+          { keyword: '机器学习算法', count: 120, percentage: 12.0 },
           { keyword: '深度学习', count: 100, percentage: 10.0 },
           { keyword: '神经网络', count: 90, percentage: 9.0 },
           { keyword: '自然语言处理', count: 80, percentage: 8.0 },
           { keyword: '计算机视觉', count: 70, percentage: 7.0 },
           { keyword: '数据挖掘', count: 60, percentage: 6.0 },
-          { keyword: '大数据', count: 50, percentage: 5.0 },
-          { keyword: '云计算', count: 40, percentage: 4.0 },
-          { keyword: '物联网', count: 30, percentage: 3.0 }
+          { keyword: '大数据分析', count: 50, percentage: 5.0 },
+          { keyword: '云计算平台', count: 40, percentage: 4.0 },
+          { keyword: '物联网设备', count: 30, percentage: 3.0 }
         ],
         total_count: 1000
       }
@@ -51,9 +51,17 @@ describe('数据分析流程集成测试', () => {
 
       expect(getTopKeywords).toHaveBeenCalledWith({ limit: 100 })
       expect(result.keywords).toHaveLength(10)
-      expect(result.keywords[0].keyword).toBe('人工智能')
+      expect(result.keywords[0].keyword).toBe('人工智能技术')
       expect(result.keywords[0].count).toBe(150)
       expect(result.total_count).toBe(1000)
+      
+      // 验证关键词不包含编程术语
+      const programmingTerms = ['id', 'name', 'data', 'code', 'api', 'json']
+      const extractedKeywords = result.keywords.map(k => k.keyword.toLowerCase())
+      const hasProgTerms = extractedKeywords.some(kw => 
+        programmingTerms.some(term => kw.includes(term))
+      )
+      expect(hasProgTerms).toBe(false)
     })
 
     it('应该能够限制关键词数量', async () => {

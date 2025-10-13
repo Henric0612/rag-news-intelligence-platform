@@ -1,0 +1,83 @@
+{
+  "cache_key": "kb:87:1760246096",
+  "report": {
+    "success": true,
+    "top_10_keywords": [
+      {
+        "keyword": "国台办",
+        "count": 2,
+        "percentage": 16.67
+      },
+      {
+        "keyword": "图形编辑器架构",
+        "count": 2,
+        "percentage": 16.67
+      },
+      {
+        "keyword": "李成钢",
+        "count": 1,
+        "percentage": 8.33
+      },
+      {
+        "keyword": "应对单边和保护主义",
+        "count": 1,
+        "percentage": 8.33
+      },
+      {
+        "keyword": "高通",
+        "count": 1,
+        "percentage": 8.33
+      },
+      {
+        "keyword": "为反制中国新措施",
+        "count": 1,
+        "percentage": 8.33
+      },
+      {
+        "keyword": "警方 排除酒驾毒驾",
+        "count": 1,
+        "percentage": 8.33
+      },
+      {
+        "keyword": "董事长空缺 中国媒体",
+        "count": 1,
+        "percentage": 8.33
+      },
+      {
+        "keyword": "许思敏任娃哈哈总经理",
+        "count": 1,
+        "percentage": 8.33
+      },
+      {
+        "keyword": "调查",
+        "count": 1,
+        "percentage": 8.33
+      }
+    ],
+    "total_items": 87,
+    "total_keywords_extracted": 10,
+    "unique_keywords": 84,
+    "category_distribution": [
+      {
+        "category": "society",
+        "count": 48,
+        "percentage": 55.17
+      },
+      {
+        "category": "科技",
+        "count": 39,
+        "percentage": 44.83
+      }
+    ],
+    "source_type_distribution": [
+      {
+        "source_type": "rss",
+        "count": 87,
+        "percentage": 100.0
+      }
+    ],
+    "timestamp": "2025-10-11T10:07:07.533024"
+  },
+  "cached_at": "2025-10-13T10:59:07.399687+00:00",
+  "cache_version": "1.0"
+}

@@ -1,246 +1,265 @@
-# XU-News-AI-RAG
-基于AI的新闻RAG系统
+# RAG News Intelligence Platform
 
-## 项目结构
-- Backend/ - 后端API服务（Flask + SQLAlchemy）
-- Frontend/ - 前端界面（Vue 3 + Element Plus）
-- Product Prototype/ - 产品原型
-- Docs/ - 项目文档
-- .gitignore - Git忽略文件配置
+> A full-stack, local-first system for ingesting news content, managing a knowledge base, retrieving and reranking relevant evidence, and generating grounded answers with a local LLM.
 
-## 快速开始
+This repository is an engineering case study in RAG application design. It combines a Flask API, a Vue client, SQLite-backed knowledge management, FAISS retrieval, CrossEncoder reranking, and Qwen inference through Ollama. The implementation is production-oriented, but it is not presented as production-ready.
 
-### 环境要求
-- **后端**: Python 3.13+
-- **前端**: Node.js 18+
-- **AI模型**: Ollama (可选，用于RAG问答)
+## Overview
 
-### 后端服务（模块模式，推荐）
+RAG News Intelligence Platform turns fragmented RSS feeds, web pages, and uploaded content into a searchable local knowledge base. Users can manage sources, run semantic or keyword searches, and ask questions against retrieved evidence through a web interface.
+
+The portfolio focus is the end-to-end engineering workflow: ingestion, persistence, vector indexing, two-stage retrieval, context construction, local generation, API integration, failure handling, and layered software testing.
+
+## Problem
+
+News research often spans disconnected sources and relies on exact-keyword search. That makes it difficult to organize material locally, retrieve conceptually related items, and trace an answer back to supporting records.
+
+This project explores a reproducible local workflow that:
+
+- ingests content from RSS feeds, web pages, and files;
+- stores and manages source material as a knowledge base;
+- retrieves semantically relevant records instead of relying only on exact terms;
+- reranks candidates before constructing LLM context;
+- runs the core AI models locally; and
+- exposes the workflow through REST APIs and a browser client.
+
+## System Architecture
+
+```mermaid
+flowchart TB
+    USER["User"] --> UI["Vue 3 frontend"]
+    SOURCE["RSS, web, and files"] --> API["Flask REST API"]
+    UI --> API
+    API --> SERVICES["Application services"]
+    SERVICES --> SQL[("SQLite knowledge store")]
+    SERVICES --> INDEX[("FAISS vector index")]
+    SERVICES --> MODELS["Local AI services"]
+    MODELS --> EMB["Sentence-transformer embeddings"]
+    MODELS --> RERANK["CrossEncoder reranker"]
+    MODELS --> LLM["Ollama / Qwen3:8b"]
+```
+
+Flask blueprints define the HTTP boundary, while service modules contain authentication, ingestion, knowledge-management, retrieval, generation, analytics, and health-check logic. SQLite stores application and knowledge records; FAISS stores the corresponding vector index.
+
+Redis, Celery, and APScheduler appear in configuration or dependencies, but they are not shown as active architecture components because the current repository does not provide sufficient runtime wiring evidence.
+
+## RAG Pipeline
+
+```mermaid
+flowchart TB
+    INGEST["Content ingestion"] --> PREP["Clean and normalize"]
+    PREP --> STORE["Persist content and metadata"]
+    PREP --> DOCEMB["Generate document embeddings"]
+    DOCEMB --> FAISS["Persist FAISS index"]
+    QUERY["User query"] --> QEMB["Generate query embedding"]
+    QEMB --> RETRIEVE["FAISS similarity retrieval"]
+    FAISS --> RETRIEVE
+    STORE --> RETRIEVE
+    RETRIEVE --> RERANK["CrossEncoder reranking"]
+    RERANK --> CONTEXT["Bounded context construction"]
+    CONTEXT --> GENERATE["Qwen generation through Ollama"]
+    GENERATE --> ANSWER["Answer and source records"]
+```
+
+The current query path embeds the question, retrieves candidate IDs from an `IndexFlatIP` FAISS index, loads the associated records from SQLite, optionally reranks them with a CrossEncoder, builds a bounded context, and invokes Qwen through Ollama. If vector retrieval is unavailable or empty, the search service can fall back to keyword retrieval. Optional web fallback is disabled by default.
+
+## Key Engineering Decisions
+
+| Decision | Engineering rationale and trade-off |
+| --- | --- |
+| Local model execution | Hugging Face embedding and reranking models are loaded from the local cache, while Qwen is served by Ollama. This keeps the core RAG path local, at the cost of manual model provisioning and local compute requirements. |
+| SQLite plus FAISS | SQLite provides simple relational persistence for users, sources, and knowledge records; FAISS provides lightweight vector similarity search. The combination is practical for a local case study, not a claim of production-scale storage. |
+| Retrieval followed by reranking | FAISS narrows the candidate set efficiently; the CrossEncoder applies a more query-aware relevance pass before context construction. No claim is made that this model combination is optimal without a dedicated benchmark. |
+| Keyword degradation path | Keyword retrieval keeps search behavior available when embeddings or the vector index are unavailable. This improves resilience while making the returned search type explicit. |
+| Separate client, routes, and services | Vue, Flask blueprints, and backend service modules keep presentation, HTTP handling, and application logic distinct enough to test and evolve independently. |
+| Layered validation | Unit, integration, API, end-to-end, performance, and frontend security test modules exercise software behavior at different boundaries. Dedicated RAG quality evaluation remains future work. |
+
+## Key Capabilities
+
+- RSS and web ingestion, file upload, and knowledge-base CRUD operations
+- Local embeddings with `all-MiniLM-L6-v2`
+- FAISS semantic retrieval with keyword fallback
+- CrossEncoder reranking with `ms-marco-MiniLM-L-6-v2`
+- RAG question answering and streaming responses through Ollama and `qwen3:8b`
+- JWT-based authentication and account-management flows
+- REST APIs for knowledge, search, RAG, ingestion, analytics, upload, and health checks
+- Vue-based search, chat, knowledge-management, analytics, and system-health interfaces
+
+## Tech Stack
+
+| Layer | Technologies |
+| --- | --- |
+| Frontend | Vue 3, Vite, Element Plus, Pinia, Vue Router, Axios |
+| API and application | Python, Flask, Flask-SQLAlchemy, Flask-JWT-Extended, Marshmallow |
+| Data and retrieval | SQLite, FAISS, Sentence Transformers, LangChain |
+| Generation | Ollama, Qwen3:8b |
+| Ingestion and analysis | Requests, Beautiful Soup, Feedparser, Trafilatura, scikit-learn |
+| Testing | pytest, pytest-cov, Vitest, Vue Test Utils, Playwright test specification |
+
+## Testing & Validation
+
+The repository contains **51 categorized test modules** rather than relying on a single happy-path demo:
+
+| Area | Unit | Integration | API | E2E | Performance | Security | Total |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Backend | 12 | 5 | 8 | 6 | 4 | 0 | 35 |
+| Frontend | 7 | 6 | 0 | 1 | 1 | 1 | 16 |
+
+Backend pytest configuration includes an 80% coverage failure threshold. Frontend tooling can generate a Vitest coverage report, and the repository includes a Playwright end-to-end specification; Playwright must currently be installed separately before that specification can run.
+
+These are repository-level test assets and configuration evidence, not a claim that every suite currently passes in CI. The automated tests primarily validate software behavior. Retrieval relevance, answer groundedness, and end-to-end RAG quality are not yet covered by a dedicated evaluation framework.
+
+### Test commands
+
 ```bash
-# 1. 创建并激活虚拟环境
+# Backend
 cd Backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+python run_tests.py
 
-# 2. 安装依赖
-pip install -r requirements.txt
+# Frontend unit/integration/performance/security suites
+cd ../Frontend
+npm run test:all
+npm run test:coverage
 
-# 3. 下载AI模型到本地（重要）
-# 嵌入模型（约90MB）
+# Optional browser E2E setup
+npm install -D @playwright/test
+npx playwright install
+npm run test:e2e
+```
+
+## Current Engineering Evidence
+
+- The application factory registers eight Flask blueprints across auth, knowledge, search, RAG, crawler, upload, analytics, and health domains.
+- The service layer implements local embedding, persistent FAISS indexing, semantic retrieval, reranking, bounded context construction, and Ollama generation.
+- Knowledge records and vector mappings are synchronized through explicit service operations.
+- Health and readiness endpoints inspect database and model-service state.
+- The Vue client contains dedicated API modules, Pinia stores, routed views, and test suites for the principal application flows.
+
+No latency, throughput, retrieval-quality, or answer-quality benchmark is claimed in this phase.
+
+## Run Locally
+
+### Prerequisites
+
+- Python 3.13 environment
+- Node.js 18 or later
+- Ollama for local RAG generation
+
+### 1. Prepare the backend
+
+```bash
+git clone https://github.com/Henric0612/XU-AI-RAG.git
+cd XU-AI-RAG
+
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r Backend/requirements.txt
+
+# Cache the embedding and reranking models before starting the offline backend
 python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
-# 重排模型（约120MB）
 python -c "from sentence_transformers import CrossEncoder; CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
+```
 
-# 4. 安装并启动Ollama（可选，用于RAG问答）
-# 访问 https://ollama.ai/download 下载安装
-ollama pull qwen3:8b  # 下载模型（约5GB）
-ollama serve          # 启动服务
+In a separate terminal, prepare and start Ollama:
 
-# 5. 初始化数据库
+```bash
+ollama pull qwen3:8b
+ollama serve
+```
+
+### 2. Initialize the local database and start the API
+
+> **Development data warning:** `Backend/init_db.py` drops and recreates the local database before creating demo users. Do not run it against data you need to preserve.
+
+```bash
+cd Backend
 python init_db.py
-
-# 6. 启动后端服务（在项目根目录）
 cd ..
 python -m Backend
 ```
 
-后端服务将在 `http://localhost:5000` 启动
+The API starts at `http://localhost:5000`.
 
-### 前端界面
+### 3. Start the frontend
+
 ```bash
 cd Frontend
 npm install
-
-# 配置环境变量（可选）
-cp env.example .env
-# 编辑 .env 文件，设置 VITE_API_BASE_URL=http://localhost:5000
-
-# 启动开发服务器
+cp env.example .env  # Windows: copy env.example .env
 npm run dev
 ```
 
-访问 `http://localhost:3000` 查看前端界面
+Open `http://localhost:3000`.
 
-### 默认账户
-- **管理员**: 用户名 `admin` / 密码 `admin123`
-- **测试用户**: 用户名 `testuser` / 密码 `test123`
+### Development-only demo credentials
 
-## 🧪 测试
+| Role | Username | Password |
+| --- | --- | --- |
+| Administrator | `admin` | `admin123` |
+| Test user | `testuser` | `test123` |
 
-### 后端测试
-```bash
-cd Backend
-# 安装依赖（包含测试依赖）
-pip install -r requirements.txt
+These credentials are created only for isolated local development. They must be changed or removed before any shared or externally accessible deployment.
 
-# 运行所有测试
-python run_tests.py
+## Repository Structure
 
-# 运行特定测试
-python -m pytest tests/unit/ -v
-python -m pytest tests/integration/ -v
+```text
+.
+├── Backend/
+│   ├── models/          # SQLAlchemy domain models
+│   ├── routes/          # Flask API blueprints
+│   ├── services/        # Application and AI services
+│   ├── tests/           # Backend validation suites
+│   └── data/            # Local SQLite, FAISS, cache, and upload paths
+├── Frontend/
+│   ├── src/             # Vue application, stores, API clients, and views
+│   └── tests/           # Frontend validation suites
+├── Docs/                # Detailed academic and engineering documentation
+└── Product Prototype/   # Earlier static product prototype
 ```
 
-### 前端测试
-```bash
-cd Frontend
-# 安装依赖
-npm install
+## AI-Assisted Development
 
-# 运行所有测试
-node run_tests.js
+This project was developed with extensive AI coding assistance.
 
-# 按类型运行
-npm run test:unit          # 单元测试（9个）
-npm run test:integration   # 集成测试（5个）
-npm run test:e2e           # E2E测试（6个）
-npm run test:coverage      # 覆盖率报告
-```
+The human engineering contribution focused on problem definition, system architecture, workflow design, technology selection, requirement decomposition, iterative implementation guidance, validation, testing, debugging, integration, and engineering review. The portfolio value of the project is intended to demonstrate engineering judgment and an AI-assisted software development workflow rather than manually authored code volume.
 
-### 测试覆盖率
-- **后端**: 40个单元测试 + 18个集成测试 + 18个API测试 + 7个E2E测试 + 6个性能测试 = **89个测试用例**
-- **前端**: 7个单元测试 + 6个集成测试 + 1个E2E测试 + 1个性能测试 + 1个安全测试 = **16个测试用例**
-- **总计**: **105个测试用例**，覆盖率 > 80%
-- 后端报告: `Backend/htmlcov/index.html`
-- 前端报告: `Frontend/coverage/index.html`
+## Current Limitations
 
-## 技术栈
+- Setup and model provisioning are manual; there is no containerized deployment.
+- SQLite and a local FAISS index target single-machine development rather than distributed production use.
+- Redis, Celery, and APScheduler are not established as active runtime dependencies in the current application wiring.
+- There is no repository-level CI/CD pipeline or automated quality gate execution.
+- RAG evaluation is limited to software-behavior tests and a simple heuristic response score; there is no dedicated retrieval or groundedness benchmark.
+- Observability is limited to application logging and health/readiness endpoints.
+- Local Ollama availability and locally cached Hugging Face models are operational prerequisites.
+- Secrets management, TLS, deployment hardening, and production data migration are not implemented.
 
-### 后端
-- **框架**: Python 3.13 + Flask 3.0.3
-- **数据库**: SQLite 3.x + SQLAlchemy 2.0.35
-- **向量数据库**: FAISS 1.8.0
-- **AI框架**: LangChain 0.1.0+ (RAG框架)
-- **嵌入模型**: Sentence-Transformers (all-MiniLM-L6-v2)
-- **重排模型**: CrossEncoder (ms-marco-MiniLM-L-6-v2)
-- **LLM**: Ollama + Qwen3:8b
-- **任务调度**: APScheduler 3.10.4 + Celery 5.3.6
-- **缓存**: Redis 5.0.1
-- **测试**: pytest 8.3.3
-- **爬虫**: BeautifulSoup4 4.12.3 + Requests 2.31.0
+## Roadmap
 
-### 前端
-- **框架**: Vue 3.4.0 + Vite 5.0.8
-- **UI组件**: Element Plus 2.4.4
-- **状态管理**: Pinia 2.1.7 + pinia-plugin-persistedstate 3.2.1
-- **路由**: Vue Router 4.2.5
-- **HTTP客户端**: Axios 1.6.2
-- **Markdown渲染**: markdown-it 14.1.0
-- **代码高亮**: highlight.js 11.11.1
-- **安全**: DOMPurify 3.2.7
-- **测试**: Vitest 1.6.1 + Playwright (E2E)
+### Phase B — Containerized RAG Stack
 
-## 功能特性
+- Containerize the backend and frontend.
+- Add Docker Compose for the application and appropriate local dependencies.
+- Integrate Redis and Ollama explicitly where they provide demonstrated value.
 
-### 核心功能（10项考核要求）
-1. ✅ **定时任务+RSS/网页抓取** - APScheduler定时任务 + RSS订阅 + 网页爬虫
-2. ✅ **Ollama部署qwen3:8b** - 本地LLM服务 + 流式输出支持
-3. ✅ **本地知识库+嵌入+重排** - FAISS向量库 + LangChain框架 + CrossEncoder重排
-4. ✅ **API写入知识库** - RESTful API + 文件上传 + 批量操作
-5. ✅ **入库邮件通知** - SMTP邮件服务 + 异步发送
-6. ✅ **用户登录** - JWT认证 + 密码加密 + Token刷新
-7. ✅ **知识库管理** - CRUD操作 + 筛选排序 + 批量删除
-8. ✅ **语义查询** - 向量检索 + 语义搜索 + 搜索建议
-9. ✅ **联网查询回退** - 百度搜索API + 智能回退机制
-10. ✅ **数据聚类分析** - KMeans聚类 + TF-IDF + Top10关键词
+### Phase C — CI-Tested AI Application
 
-### 扩展功能
-- ✅ **智能问答系统** - RAG问答 + 多轮对话 + 流式输出
-- ✅ **搜索历史管理** - 历史记录 + 搜索统计
-- ✅ **系统健康监控** - 实时状态 + 模型状态检查
-- ✅ **响应式前端界面** - Vue 3 + Element Plus + 暗色模式
-- ✅ **完整的测试套件** - 105个测试用例 + 80%+覆盖率
-- ✅ **账户安全** - 密码重置 + 邮箱验证 + Token黑名单
-- ✅ **内容质量优化** - 短内容智能补全 + 质量评分
+- Add GitHub Actions for backend and frontend tests.
+- Add repeatable builds, coverage reporting, and quality gates.
 
-## 项目架构
+### Phase D — Evaluated and Observable RAG System
 
-```
-XU-News-AI-RAG/
-├── Backend/              # 后端服务
-│   ├── models/          # 数据模型（8个模型）
-│   ├── services/        # 业务逻辑（17个服务）
-│   ├── routes/          # API路由（8个路由）
-│   ├── utils/           # 工具函数
-│   ├── tests/           # 测试套件（89个测试）
-│   └── data/            # 数据存储
-│       ├── sqlite/      # SQLite数据库
-│       ├── faiss/       # FAISS向量索引
-│       └── uploads/     # 上传文件
-├── Frontend/            # 前端界面
-│   ├── src/
-│   │   ├── api/        # API接口（9个）
-│   │   ├── components/ # Vue组件（13个）
-│   │   ├── views/      # 页面视图（10个）
-│   │   ├── stores/     # Pinia状态管理（4个）
-│   │   └── router/     # 路由配置
-│   └── tests/          # 测试套件（16个测试）
-├── Docs/               # 项目文档
-│   ├── 产品需求文档_v2.md
-│   ├── 技术架构文档.md
-│   ├── 概要设计文档_v2.md
-│   ├── 测试计划文档_v3.md
-│   └── 敏捷开发指导书_v3.md
-└── Product Prototype/  # 产品原型
-```
+- Add lightweight retrieval and reranking evaluation.
+- Measure answer grounding and end-to-end latency.
+- Introduce structured metrics, tracing, and operational dashboards.
 
-## 开发指南
+### Later — AI Platform Evolution
 
-### 后端开发
-详见 [Backend/README.md](Backend/README.md)
+- Evaluate Kubernetes only after container and CI foundations are stable.
+- Explore production-oriented model and LLM serving, scaling, and deeper observability.
 
-**关键服务**：
-- `auth_service.py` - 用户认证
-- `knowledge_service.py` - 知识库管理
-- `vector_service.py` - 向量化（LangChain HuggingFaceEmbeddings）
-- `search_service.py` - 语义搜索（LangChain CrossEncoderReranker）
-- `llm_service.py` - LLM服务（LangChain Ollama）
-- `rag_service.py` - RAG问答（LangChain LCEL）
-- `crawler_service.py` - 爬虫服务
-- `analytics_service.py` - 数据分析
+Roadmap items describe planned evolution, not current capability.
 
-### 前端开发
-详见 [Frontend/README.md](Frontend/README.md)
+## Academic Context
 
-**关键页面**：
-- `/login` - 登录页
-- `/` - 仪表板
-- `/knowledge` - 知识库管理
-- `/search` - 智能搜索
-- `/analytics` - 数据分析
-- `/health` - 系统健康
-
-### 测试文档
-- **后端测试**: [Backend/tests/README.md](Backend/tests/README.md) - 89个测试用例
-- **前端测试**: [Frontend/tests/README.md](Frontend/tests/README.md) - 16个测试用例
-
-## 重要说明
-
-### AI模型配置
-⚠️ **所有AI模型必须提前下载到本地**，系统运行在**离线模式**：
-- 嵌入模型：`sentence-transformers/all-MiniLM-L6-v2` (~90MB)
-- 重排模型：`cross-encoder/ms-marco-MiniLM-L-6-v2` (~120MB)
-- LLM模型：`qwen3:8b` (~5GB，通过Ollama安装)
-
-模型缓存位置：`~/.cache/huggingface/hub/`
-
-### 环境配置
-- 后端配置：复制 `Backend/env.example` 为 `Backend/.env`
-- 前端配置：复制 `Frontend/env.example` 为 `Frontend/.env`
-- 关键配置项：
-  - `SECRET_KEY` - Flask密钥
-  - `JWT_SECRET_KEY` - JWT密钥
-  - `SMTP_USERNAME` / `SMTP_PASSWORD` - 邮件服务（可选）
-  - `OLLAMA_HOST` - Ollama服务地址
-
-### 生产部署注意事项
-1. 修改所有密钥（SECRET_KEY, JWT_SECRET_KEY）
-2. 使用PostgreSQL替代SQLite
-3. 配置Redis用于缓存和任务队列
-4. 启用HTTPS
-5. 配置反向代理（Nginx/Apache）
-6. 设置环境变量而非.env文件
-7. 进行安全审计和性能测试
-
-## 许可证
-MIT License
+This project originated as university coursework and is now being developed into an engineering portfolio case study. The emphasis is shifting from assessment-oriented feature coverage toward evidence-based RAG engineering, validation, and a credible path to production AI platform practices.

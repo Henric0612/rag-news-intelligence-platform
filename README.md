@@ -148,8 +148,8 @@ No latency, throughput, retrieval-quality, or answer-quality benchmark is claime
 ### 1. Prepare the backend
 
 ```bash
-git clone https://github.com/Henric0612/XU-AI-RAG.git
-cd XU-AI-RAG
+git clone https://github.com/Henric0612/rag-news-intelligence-platform.git
+cd rag-news-intelligence-platform
 
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate

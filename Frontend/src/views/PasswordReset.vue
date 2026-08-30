@@ -4,7 +4,7 @@
       <div class="reset-header">
         <div class="logo">
           <el-icon class="logo-icon"><DataAnalysis /></el-icon>
-          <h1>XU News AI RAG</h1>
+          <h1>RAG News Intelligence Platform</h1>
         </div>
         <p class="reset-subtitle">密码重置</p>
       </div>

@@ -32,7 +32,7 @@ def init_database():
             print("创建管理员用户...")
             admin = User(
                 username='admin',
-                email='admin@xu-news.com',
+                email='admin@rag-news-intelligence-platform.local',
                 role='admin',
                 is_active=True
             )
@@ -42,7 +42,7 @@ def init_database():
             print("创建测试用户...")
             test_user = User(
                 username='testuser',
-                email='test@xu-news.com',
+                email='test@rag-news-intelligence-platform.local',
                 role='user',
                 is_active=True
             )

@@ -4,7 +4,7 @@
       <div class="header-left">
         <h1 class="logo">
           <el-icon class="logo-icon"><DataAnalysis /></el-icon>
-          XU News AI RAG
+          RAG News Intelligence Platform
         </h1>
       </div>
       

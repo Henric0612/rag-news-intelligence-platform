@@ -1,0 +1,61 @@
+name: rag-news-intelligence-platform
+
+services:
+  backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    environment:
+      FLASK_ENV: production
+      SECRET_KEY: ${SECRET_KEY:-local-compose-secret-change-me}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-local-compose-jwt-secret-change-me}
+      RAG_DATA_DIR: /app/Backend/data
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      LLM_MODEL: ${LLM_MODEL:-qwen3:8b}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-5000}:5000"
+    volumes:
+      - rag_data:/app/Backend/data
+    networks:
+      - app_network
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:5000/api/health', timeout=5)
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
+    networks:
+      - app_network
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --quiet
+        - --spider
+        - http://127.0.0.1:3000/
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  rag_data:

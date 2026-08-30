@@ -18,6 +18,22 @@ logger = logging.getLogger(__name__)
 rag_bp = Blueprint('rag', __name__, url_prefix='/api/rag')
 
 
+def _rag_result_response(result):
+    """Return a structured failure when the RAG service reports an error."""
+    error = result.get('error') if isinstance(result, dict) else None
+    if not error:
+        return success_response(result)
+
+    error_code = result.get('error_code', 'RAG_REQUEST_FAILED')
+    status_code = 503 if error_code == 'AI_DEPENDENCY_UNAVAILABLE' else 500
+    message = (
+        'AI服务暂时不可用，请稍后重试。'
+        if status_code == 503
+        else 'RAG问答失败，请稍后重试。'
+    )
+    return error_response(message, status_code, data={'error_code': error_code})
+
+
 class RAGQuerySchema(Schema):
     """RAG查询验证模式"""
     query = fields.Str(required=True, validate=validate.Length(min=1, max=1000))
@@ -100,7 +116,7 @@ def ask_question():
             request_time = time.time() - request_start_time
             logger.info(f"RAG请求完成，总耗时: {request_time:.2f}秒")
             
-            return success_response(result)
+            return _rag_result_response(result)
         
     except Exception as e:
         logger.error(f"RAG问答失败: {str(e)}")
@@ -182,7 +198,7 @@ def generate_answer():
         # 执行LLM生成
         result = rag_service.integrate_llm_generation(query, context, options)
         
-        return success_response(result)
+        return _rag_result_response(result)
         
     except Exception as e:
         logger.error(f"LLM生成失败: {str(e)}")

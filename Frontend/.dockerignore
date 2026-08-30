@@ -1,0 +1,12 @@
+.env*
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+.npm/
+.eslintcache
+*.log
+*.tmp
+*.temp
+*~

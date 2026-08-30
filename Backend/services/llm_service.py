@@ -207,6 +207,9 @@ class LLMService:
             
             # 检查LLM是否初始化
             if self.llm is None:
+                self._initialize_client()
+
+            if self.llm is None:
                 logger.error("LangChain Ollama未初始化")
                 return {
                     'answer': '抱歉，AI服务暂时不可用，请稍后重试。',
@@ -260,6 +263,12 @@ class LLMService:
     def stream_response(self, query: str, context: List[Dict], options: Optional[Dict] = None) -> Generator[str, None, None]:
         """流式输出响应 (使用LangChain Ollama)"""
         try:
+            if self.llm is None:
+                self._initialize_client()
+
+            if self.llm is None:
+                raise RuntimeError('AI dependency unavailable')
+
             # 构建提示词
             prompt = self.build_prompt(query, context)
             
@@ -270,7 +279,7 @@ class LLMService:
                     
         except Exception as e:
             logger.error(f"LangChain流式输出失败: {str(e)}")
-            yield f"生成失败: {str(e)}"
+            raise RuntimeError('AI dependency unavailable') from e
     
     def evaluate_answer_quality(self, answer: str, query: str, context: List[Dict]) -> float:
         """评估答案质量"""

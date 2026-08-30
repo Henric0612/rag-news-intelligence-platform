@@ -4,7 +4,7 @@ export const Navbar = {
       <div class="container nav-inner">
         <a href="home.html" class="brand">
           <span class="brand-dot"></span>
-          <span>XU-News AI</span>
+          <span>RAG News Intelligence Platform</span>
         </a>
         <div class="spacer"></div>
         <a href="upload.html" class="btn ghost">上传文档</a>
@@ -15,5 +15,4 @@ export const Navbar = {
     </header>
   `
 };
-
 

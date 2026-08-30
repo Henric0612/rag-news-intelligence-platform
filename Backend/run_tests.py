@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-XU News AI RAG - 后端测试运行脚本
+RAG News Intelligence Platform - 后端测试运行脚本
 
 支持运行不同类型和Sprint的测试，生成覆盖率报告。
 
@@ -160,7 +160,7 @@ def run_quick_tests():
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description="XU News AI RAG 后端测试运行脚本",
+        description="RAG News Intelligence Platform 后端测试运行脚本",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
@@ -189,7 +189,7 @@ def main():
     
     # 显示标题
     print("\n" + "="*60)
-    print("🧪 XU News AI RAG - 后端测试套件")
+    print("🧪 RAG News Intelligence Platform - 后端测试套件")
     print("="*60)
     
     # 检查环境

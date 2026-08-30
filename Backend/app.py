@@ -1,5 +1,5 @@
 """
-XU-News-AI-RAG backend main app
+RAG News Intelligence Platform backend main app
 """
 import os
 import warnings
@@ -69,7 +69,7 @@ def create_app(config_name=None):
     
     if not is_reloader_process:
         print("\n" + "="*80)
-        print("XU-News-AI-RAG starting...")
+        print("RAG News Intelligence Platform starting...")
         print("="*80)
     
     if config_name is None:

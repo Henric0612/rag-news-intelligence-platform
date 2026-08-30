@@ -141,7 +141,13 @@ class RAGService:
                 )
                 
                 # 调用 Chain 生成答案
-                answer = rag_chain.invoke(query)
+                try:
+                    answer = rag_chain.invoke(query)
+                except Exception as e:
+                    logger.error(f"AI依赖调用失败: {str(e)}")
+                    return self._create_error_response(
+                        query, 'AI_DEPENDENCY_UNAVAILABLE'
+                    )
                 
                 llm_response = {
                     'answer': answer,
@@ -154,6 +160,11 @@ class RAGService:
             else:
                 # 降级到原有方式
                 llm_response = self.llm_service.generate_answer(query, context, options)
+
+            if llm_response.get('error'):
+                return self._create_error_response(
+                    query, 'AI_DEPENDENCY_UNAVAILABLE'
+                )
             
             # 5. 响应验证
             validated_response = self.validate_response(llm_response, query, context)
@@ -183,6 +194,7 @@ class RAGService:
             logger.error(f"LangChain RAG流程失败: {str(e)}")
             return {
                 'error': str(e),
+                'error_code': 'RAG_REQUEST_FAILED',
                 'answer': '抱歉，当前无法回答您的问题。',
                 'formatted_response': {'answer': '抱歉，当前无法回答您的问题。'},
                 'sources': [],
@@ -299,8 +311,17 @@ class RAGService:
             yield {'type': 'sources', 'data': sources_data}
             
             # ✅ 流式输出答案内容
-            for chunk in self.llm_service.stream_response(query, context, options):
-                yield {'type': 'content', 'data': chunk}
+            try:
+                for chunk in self.llm_service.stream_response(query, context, options):
+                    yield {'type': 'content', 'data': chunk}
+            except Exception as e:
+                logger.error(f"AI依赖流式调用失败: {str(e)}")
+                yield {
+                    'type': 'error',
+                    'code': 'AI_DEPENDENCY_UNAVAILABLE',
+                    'message': 'AI服务暂时不可用，请稍后重试。'
+                }
+                return
             
             # ✅ 发送完成信息（带统计数据）
             total_time = time.time() - start_time
@@ -440,6 +461,21 @@ class RAGService:
             'total_tokens': 0,
             'model': 'none',
             'rag_version': '1.0'
+        }
+
+    def _create_error_response(self, query: str, error_code: str) -> Dict[str, Any]:
+        """Create an internal failure result for the API contract adapter."""
+        return {
+            'query': query,
+            'error': True,
+            'error_code': error_code,
+            'answer': '抱歉，AI服务暂时不可用，请稍后重试。',
+            'formatted_response': {
+                'answer': '抱歉，AI服务暂时不可用，请稍后重试。'
+            },
+            'sources': [],
+            'knowledge_used': False,
+            'web_search_used': False
         }
     
     def get_rag_stats(self) -> Dict[str, Any]:

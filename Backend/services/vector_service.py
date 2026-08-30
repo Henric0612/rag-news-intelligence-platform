@@ -312,8 +312,22 @@ class VectorService:
         之后的检索如果命中该 vector_id 会被忽略。
         """
         try:
-            if vector_id in self.id_mapping:
-                del self.id_mapping[vector_id]
+            # 新增向量时映射键是 int；从 JSON 重载后映射键是 str。
+            # SQLite 的 vector_id 字段也会把整数转换为字符串，因此两种形式都要兼容。
+            mapping_key = vector_id
+            if mapping_key not in self.id_mapping:
+                try:
+                    integer_key = int(vector_id)
+                except (TypeError, ValueError):
+                    integer_key = None
+
+                if integer_key in self.id_mapping:
+                    mapping_key = integer_key
+                else:
+                    mapping_key = str(vector_id)
+
+            if mapping_key in self.id_mapping:
+                del self.id_mapping[mapping_key]
                 # 仅保存映射文件
                 try:
                     with open(self.id_mapping_path, 'w', encoding='utf-8') as f:
@@ -381,9 +395,11 @@ class VectorService:
                 min(top_k, len(self.id_mapping))
             )
             
-            # 转换为知识库ID
-            # 注意：JSON加载时键是字符串，需要将整数索引转换为字符串
-            knowledge_ids = [self.id_mapping.get(str(idx), -1) for idx in vector_indices[0]]
+            # 转换为知识库ID。新增向量时键是 int，从 JSON 重载后键是 str。
+            knowledge_ids = [
+                self.id_mapping.get(int(idx), self.id_mapping.get(str(int(idx)), -1))
+                for idx in vector_indices[0]
+            ]
             
             return scores[0], knowledge_ids
         except Exception as e:
@@ -506,7 +522,7 @@ class VectorService:
         try:
             return current_app.config.get(key, default)
         except Exception:
-            return default
+            return os.environ.get(key, default)
 
     def _resolve_data_dir(self) -> str:
         """解析数据目录：优先使用应用配置，否则使用包内 data 目录"""

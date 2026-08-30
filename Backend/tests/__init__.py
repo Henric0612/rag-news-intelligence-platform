@@ -1,3 +1,3 @@
 """
-XU News AI RAG 后端测试包
+RAG News Intelligence Platform 后端测试包
 """

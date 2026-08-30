@@ -1,5 +1,5 @@
 # ========================================
-# XU-News-AI-RAG 项目级 .gitignore
+# rag-news-intelligence-platform 项目级 .gitignore
 # ========================================
 
 # ========================================
@@ -281,6 +281,8 @@ site/
 # ========================================
 # Docker
 .dockerignore
+!Backend/.dockerignore
+!Frontend/.dockerignore
 
 # Kubernetes
 *.yaml.bak

@@ -1,7 +1,7 @@
 """
 Backend 应用包初始化
 
-XU-News-AI-RAG 后端服务包
+RAG News Intelligence Platform 后端服务包
 """
 
 # 导出主要接口
@@ -18,4 +18,3 @@ __all__ = [
     'services',
     'utils',
 ]
-

@@ -4,7 +4,7 @@
       <div class="verification-header">
         <div class="logo">
           <el-icon class="logo-icon"><DataAnalysis /></el-icon>
-          <h1>XU News AI RAG</h1>
+          <h1>RAG News Intelligence Platform</h1>
         </div>
         <p class="verification-subtitle">邮箱验证</p>
       </div>

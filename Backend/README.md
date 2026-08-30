@@ -1,4 +1,4 @@
-# XU-News-AI-RAG 后端
+# RAG News Intelligence Platform 后端
 
 基于 Flask 3.x 的智能新闻问答系统后端服务。
 
@@ -8,8 +8,7 @@
 - **数据库**: SQLite 3.x / SQLAlchemy
 - **认证**: JWT (Flask-JWT-Extended)
 - **AI模型**: Sentence-Transformers, FAISS, Ollama
-- **任务调度**: Celery, APScheduler
-- **缓存**: Redis
+- **可选依赖**: Redis、Celery、APScheduler 存在于配置或依赖中，但当前运行时没有充分 wiring 证据，不属于 Phase B Compose 拓扑
 
 ## 项目结构
 
@@ -145,7 +144,7 @@ python -m Backend
 
 **Windows PowerShell 示例**：
 ```powershell
-cd "C:\Users\67464\Pre-Departure Practical Camp for International AI Engineers\XU-News-AI-RAG"
+cd "C:\path\to\rag-news-intelligence-platform"
 .\Backend\venv\Scripts\Activate.ps1
 python -m Backend
 ```
@@ -271,8 +270,14 @@ GET /api/rag/health
 
 ```http
 GET /api/health
-GET /api/ready
+GET /api/ready?quick=true
+GET /api/ready?quick=false
 ```
+
+- `/api/health` 是进程 liveness；AI 暂时不可用时仍返回 200。
+- quick readiness 检查数据库与基础配置，不触发 AI 初始化。
+- full readiness 检查 embedding、reranker、Host Ollama 与 `qwen3:8b`，依赖不可用时返回 503。
+- 非流式 RAG 的 AI 依赖失败返回 HTTP 503、`success:false` 与 `AI_DEPENDENCY_UNAVAILABLE`；SSE 返回结构化 `type:error` 事件。
 
 ## 默认账户
 
@@ -323,20 +328,24 @@ flake8 .
 
 ## 部署
 
-### Docker部署
+### Docker Compose 本地容器运行
 
 ```bash
-docker build -t xu-news-backend .
-docker run -p 5000:5000 xu-news-backend
+cd ..
+cp .env.example .env
+docker compose config
+docker compose up -d --build --wait
 ```
+
+主入口为 `http://127.0.0.1:3000`。Backend 的 `127.0.0.1:5000` 仅用于本地工程检查。Ollama 保留为 WSL host service，不在 Compose 中；SQLite、FAISS、mapping 与 uploads 统一持久化在 `rag_data` 命名卷。完整前置条件、生命周期与数据保留说明见根目录 `README.md`。
 
 ## 注意事项
 
-1. 生产环境请修改 `SECRET_KEY` 和 `JWT_SECRET_KEY`
-2. 建议使用 PostgreSQL 替代 SQLite
-3. 配置 Redis 用于缓存和任务队列
-4. 部署前请进行充分的安全测试
+1. 本地 demo 以外必须替换 `SECRET_KEY` 和 `JWT_SECRET_KEY` 示例值。
+2. 当前 SQLite + FAISS + mapping 部署约束为 single worker / single replica。
+3. Redis、Celery 与 APScheduler 未进入 Phase B 运行拓扑。
+4. 项目是 production-oriented，但不是 production-ready。
 
 ## License
 
-Copyright © 2025 XU-News-AI-RAG Project
+Copyright © 2025 RAG News Intelligence Platform Project

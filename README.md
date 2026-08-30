@@ -27,17 +27,17 @@ This project explores a reproducible local workflow that:
 
 ```mermaid
 flowchart TB
-    USER["User"] --> UI["Vue 3 frontend"]
-    SOURCE["RSS, web, and files"] --> API["Flask REST API"]
-    UI --> API
+    USER["Browser"] -->|127.0.0.1:3000| UI["Vue production build / Caddy"]
+    SOURCE["RSS, web, and files"] --> API["Flask / Gunicorn, one worker"]
+    UI -->|/api via Docker DNS| API
     API --> SERVICES["Application services"]
-    SERVICES --> SQL[("SQLite knowledge store")]
-    SERVICES --> INDEX[("FAISS vector index")]
-    SERVICES --> MODELS["Local AI services"]
-    MODELS --> EMB["Sentence-transformer embeddings"]
-    MODELS --> RERANK["CrossEncoder reranker"]
-    MODELS --> LLM["Ollama / Qwen3:8b"]
+    SERVICES --> DATA[("rag_data volume: SQLite, FAISS, mapping, uploads")]
+    SERVICES --> EMB["Sentence-transformer embeddings / CPU"]
+    SERVICES --> RERANK["CrossEncoder reranker / CPU"]
+    SERVICES -->|host.docker.internal:11434| LLM["WSL host Ollama / Qwen3:8b / GPU"]
 ```
+
+Docker Compose provides the reproducible local container workflow. The frontend and backend run in separate containers, while Ollama remains a WSL host service. Native WSL development remains available for the faster edit/debug loop.
 
 Flask blueprints define the HTTP boundary, while service modules contain authentication, ingestion, knowledge-management, retrieval, generation, analytics, and health-check logic. SQLite stores application and knowledge records; FAISS stores the corresponding vector index.
 
@@ -72,6 +72,7 @@ The current query path embeds the question, retrieves candidate IDs from an `Ind
 | Retrieval followed by reranking | FAISS narrows the candidate set efficiently; the CrossEncoder applies a more query-aware relevance pass before context construction. No claim is made that this model combination is optimal without a dedicated benchmark. |
 | Keyword degradation path | Keyword retrieval keeps search behavior available when embeddings or the vector index are unavailable. This improves resilience while making the returned search type explicit. |
 | Separate client, routes, and services | Vue, Flask blueprints, and backend service modules keep presentation, HTTP handling, and application logic distinct enough to test and evolve independently. |
+| Two local workflows | Native WSL is the fast development path; Docker Desktop with WSL Integration and Compose is the reproducible container validation path. Ollama stays on the host so local GPU inference is not duplicated inside Compose. |
 | Layered validation | Unit, integration, API, end-to-end, performance, and frontend security test modules exercise software behavior at different boundaries. Dedicated RAG quality evaluation remains future work. |
 
 ## Key Capabilities
@@ -84,6 +85,7 @@ The current query path embeds the question, retrieves candidate IDs from an `Ind
 - JWT-based authentication and account-management flows
 - REST APIs for knowledge, search, RAG, ingestion, analytics, upload, and health checks
 - Vue-based search, chat, knowledge-management, analytics, and system-health interfaces
+- Containerized backend and frontend orchestration with loopback-only host ports and persistent RAG state
 
 ## Tech Stack
 
@@ -134,62 +136,99 @@ npm run test:e2e
 - Knowledge records and vector mappings are synchronized through explicit service operations.
 - Health and readiness endpoints inspect database and model-service state.
 - The Vue client contains dedicated API modules, Pinia stores, routed views, and test suites for the principal application flows.
+- The Compose workflow serves the Vue production build through Caddy, runs the backend through single-worker Gunicorn, and persists SQLite, FAISS, ID mapping, and uploads in one named volume.
 
 No latency, throughput, retrieval-quality, or answer-quality benchmark is claimed in this phase.
 
-## Run Locally
+## Containerized Local Workflow
 
 ### Prerequisites
 
-- Python 3.13 environment
-- Node.js 18 or later
-- Ollama for local RAG generation
+- Windows 11 with WSL2 / Ubuntu 24.04
+- Docker Desktop using its Linux engine, with WSL Integration enabled for Ubuntu
+- Ollama running on the WSL host with `qwen3:8b` available
 
-### 1. Prepare the backend
+Do not install a second Docker Engine daemon inside Ubuntu. Ollama is deliberately not a Compose service; the backend reaches it through `host.docker.internal:11434`.
+
+### 1. Prepare local configuration and Host Ollama
 
 ```bash
 git clone https://github.com/Henric0612/rag-news-intelligence-platform.git
 cd rag-news-intelligence-platform
-
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r Backend/requirements.txt
-
-# Cache the embedding and reranking models before starting the offline backend
-python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
-python -c "from sentence_transformers import CrossEncoder; CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
+cp .env.example .env
 ```
 
-In a separate terminal, prepare and start Ollama:
+Replace the two secret placeholders in `.env` for anything beyond an isolated local demo. The file is ignored by Git.
+
+Prepare Ollama on the WSL host:
 
 ```bash
 ollama pull qwen3:8b
 ollama serve
 ```
 
-### 2. Initialize the local database and start the API
+### 2. Validate and start the stack
 
-> **Development data warning:** `Backend/init_db.py` drops and recreates the local database before creating demo users. Do not run it against data you need to preserve.
+The backend image provisions pinned revisions of the embedding and reranking models at build time and runs them offline at runtime.
 
 ```bash
-cd Backend
-python init_db.py
-cd ..
+docker compose config
+docker compose build
+docker compose up -d --wait
+```
+
+Open `http://127.0.0.1:3000`. This is the primary UI and API entrypoint. `http://127.0.0.1:5000` is also published on loopback for local debugging and health inspection; it is not a public production API exposure.
+
+Useful checks:
+
+```bash
+curl http://127.0.0.1:3000/api/health
+curl http://127.0.0.1:5000/api/health
+curl 'http://127.0.0.1:5000/api/ready?quick=true'
+curl 'http://127.0.0.1:5000/api/ready?quick=false'
+```
+
+`/api/health` is process liveness and remains healthy during a temporary AI dependency failure. Quick readiness checks the database and core configuration without initializing AI. Full readiness checks the embedding model, reranker, Host Ollama, and the expected `qwen3:8b` model; it returns HTTP 503 when a required dependency is unavailable.
+
+For RAG failures, non-stream requests return HTTP 503 with `success:false` and `data.error_code: "AI_DEPENDENCY_UNAVAILABLE"`. Streaming requests emit a structured `type:error` event.
+
+### 3. Persistence and lifecycle
+
+The `rag_data` named volume stores SQLite, the FAISS index, the ID mapping, and uploads as one logical persistence boundary. Ordinary restarts and `docker compose down` / `docker compose up` preserve it.
+
+Do not run `docker compose down -v` when the local RAG state must be retained; `-v` removes the named volume.
+
+```bash
+docker compose ps
+docker compose logs backend frontend
+docker compose down
+```
+
+## Native WSL Development Workflow
+
+Native WSL remains the preferred fast development and debugging loop. It requires Python 3.13, Node.js, locally cached Hugging Face models, and the same Host Ollama service.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r Backend/requirements.txt
+
+python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+python -c "from sentence_transformers import CrossEncoder; CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
+
 python -m Backend
 ```
 
-The API starts at `http://localhost:5000`.
-
-### 3. Start the frontend
+In a second terminal:
 
 ```bash
 cd Frontend
 npm install
-cp env.example .env  # Windows: copy env.example .env
+cp env.example .env
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+> **Development data warning:** `Backend/init_db.py` drops and recreates the local database before creating demo users. Do not run it against data you need to preserve.
 
 ### Development-only demo credentials
 
@@ -205,14 +244,19 @@ These credentials are created only for isolated local development. They must be 
 ```text
 .
 ├── Backend/
+│   ├── Dockerfile       # Python 3.13 builder/runtime image and pinned models
 │   ├── models/          # SQLAlchemy domain models
 │   ├── routes/          # Flask API blueprints
 │   ├── services/        # Application and AI services
 │   ├── tests/           # Backend validation suites
 │   └── data/            # Local SQLite, FAISS, cache, and upload paths
 ├── Frontend/
+│   ├── Dockerfile       # Vue build and Caddy runtime image
+│   ├── Caddyfile        # Static/SPA serving and /api reverse proxy
 │   ├── src/             # Vue application, stores, API clients, and views
 │   └── tests/           # Frontend validation suites
+├── compose.yaml         # Local backend/frontend orchestration and rag_data volume
+├── .env.example         # Safe Compose configuration template
 ├── Docs/                # Detailed academic and engineering documentation
 └── Product Prototype/   # Earlier static product prototype
 ```
@@ -225,22 +269,20 @@ The human engineering contribution focused on problem definition, system archite
 
 ## Current Limitations
 
-- Setup and model provisioning are manual; there is no containerized deployment.
 - SQLite and a local FAISS index target single-machine development rather than distributed production use.
 - Redis, Celery, and APScheduler are not established as active runtime dependencies in the current application wiring.
 - There is no repository-level CI/CD pipeline or automated quality gate execution.
 - RAG evaluation is limited to software-behavior tests and a simple heuristic response score; there is no dedicated retrieval or groundedness benchmark.
 - Observability is limited to application logging and health/readiness endpoints.
-- Local Ollama availability and locally cached Hugging Face models are operational prerequisites.
+- Docker Desktop, WSL Integration, Host Ollama availability, and the local `qwen3:8b` model are operational prerequisites for the container workflow.
 - Secrets management, TLS, deployment hardening, and production data migration are not implemented.
 
 ## Roadmap
 
 ### Phase B — Containerized RAG Stack
 
-- Containerize the backend and frontend.
-- Add Docker Compose for the application and appropriate local dependencies.
-- Integrate Redis and Ollama explicitly where they provide demonstrated value.
+- **Complete:** backend and frontend containers, Compose orchestration, loopback ports, unified persistence, health/readiness, and Host Ollama integration.
+- Redis remains deferred; Celery and APScheduler are not required by the demonstrated Phase B runtime.
 
 ### Phase C — CI-Tested AI Application
 
@@ -258,7 +300,7 @@ The human engineering contribution focused on problem definition, system archite
 - Evaluate Kubernetes only after container and CI foundations are stable.
 - Explore production-oriented model and LLM serving, scaling, and deeper observability.
 
-Roadmap items describe planned evolution, not current capability.
+Phase B describes current capability. Phase C, Phase D, and later items remain planned evolution.
 
 ## Academic Context
 

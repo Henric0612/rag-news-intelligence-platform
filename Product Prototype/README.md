@@ -1,4 +1,4 @@
-# XU-News-AI-RAG 产品原型
+# RAG News Intelligence Platform 产品原型
 
 ## 📋 概述
 

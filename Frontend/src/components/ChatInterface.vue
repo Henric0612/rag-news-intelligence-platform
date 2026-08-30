@@ -333,7 +333,7 @@ const exportChatHistory = () => {
 const addWelcomeMessage = () => {
   chatStore.addAIMessage({
     type: 'ai',
-    content: '您好！我是XU News AI助手，可以帮您搜索和解答新闻相关问题。请告诉我您想了解什么？',
+    content: '您好！我是 RAG News Intelligence Platform 助手，可以帮您搜索和解答新闻相关问题。请告诉我您想了解什么？',
     timestamp: new Date()
   })
 }

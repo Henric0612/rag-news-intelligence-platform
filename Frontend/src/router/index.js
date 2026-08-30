@@ -135,7 +135,7 @@ router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   
   // 设置页面标题
-  document.title = to.meta.title ? `${to.meta.title} - XU News AI RAG` : 'XU News AI RAG'
+  document.title = to.meta.title ? `${to.meta.title} - RAG News Intelligence Platform` : 'RAG News Intelligence Platform'
   
   // 确保认证状态已初始化
   if (!authStore.initialized) {

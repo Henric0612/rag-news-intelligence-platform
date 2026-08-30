@@ -1,5 +1,5 @@
 """
-XU-News-AI-RAG 后端配置文件
+RAG News Intelligence Platform 后端配置文件
 """
 import os
 from datetime import timedelta
@@ -7,7 +7,7 @@ from pathlib import Path
 
 # 基础路径
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = Path(os.environ.get('RAG_DATA_DIR', BASE_DIR / "data")).expanduser().resolve()
 SQLITE_DIR = DATA_DIR / "sqlite"
 FAISS_DIR = DATA_DIR / "faiss"
 UPLOADS_DIR = DATA_DIR / "uploads"
@@ -29,7 +29,7 @@ class Config:
     
     # ===== 模型配置 - 使用本地离线模型环境 =====
     # 本地模型缓存路径
-    MODEL_CACHE_DIR = os.path.expanduser('~/.cache/huggingface/hub')
+    MODEL_CACHE_DIR = os.path.expanduser(os.environ.get('MODEL_CACHE_DIR', '~/.cache/huggingface/hub'))
     
     # HuggingFace 离线模式配置（官方推荐）
     # 参考: https://huggingface.co/docs/transformers/installation#offline-mode
@@ -73,7 +73,11 @@ class Config:
     JWT_IDENTITY_CLAIM = 'user_id'  # 使用user_id作为身份标识字段
     
     # CORS配置
-    CORS_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000']
+    CORS_ORIGINS = [
+        origin.strip() for origin in os.environ.get(
+            'CORS_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000'
+        ).split(',') if origin.strip()
+    ]
     
     # 文件上传配置
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
@@ -96,8 +100,8 @@ class Config:
     OLLAMA_HOST = os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
     
     # FAISS配置
-    FAISS_INDEX_PATH = str(FAISS_DIR / "knowledge.index")
-    FAISS_ID_MAPPING_PATH = str(FAISS_DIR / "id_mapping.json")
+    FAISS_INDEX_PATH = os.environ.get('FAISS_INDEX_PATH', str(FAISS_DIR / "knowledge.index"))
+    FAISS_ID_MAPPING_PATH = os.environ.get('FAISS_ID_MAPPING_PATH', str(FAISS_DIR / "id_mapping.json"))
     VECTOR_DIMENSION = 384
     
     # 文本处理配置
@@ -119,7 +123,7 @@ class Config:
     LLM_TEMPERATURE = float(os.environ.get('LLM_TEMPERATURE', 0.7))
     
     # 爬虫配置
-    CRAWLER_USER_AGENT = 'Mozilla/5.0 (compatible; XU-News-Bot/1.0)'
+    CRAWLER_USER_AGENT = 'Mozilla/5.0 (compatible; RAG-News-Intelligence-Bot/1.0)'
     CRAWLER_TIMEOUT = 30
     CRAWLER_MAX_RETRIES = 3
     CRAWLER_DELAY_BETWEEN_REQUESTS = 1  # 请求间延迟（秒）
@@ -135,8 +139,8 @@ class Config:
     SMTP_PORT = int(os.environ.get('SMTP_PORT', 587))
     SMTP_USERNAME = os.environ.get('SMTP_USERNAME')
     SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD')
-    FROM_EMAIL = os.environ.get('FROM_EMAIL', 'noreply@xu-news-rag.com')
-    FROM_NAME = os.environ.get('FROM_NAME', 'XU News AI RAG')
+    FROM_EMAIL = os.environ.get('FROM_EMAIL', 'noreply@rag-news-intelligence-platform.local')
+    FROM_NAME = os.environ.get('FROM_NAME', 'RAG News Intelligence Platform')
     
     # 前端URL配置
     FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')

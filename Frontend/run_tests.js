@@ -3,7 +3,7 @@
 import { execSync } from 'child_process'
 import fs from 'fs'
 
-console.log('🧪 XU News AI RAG 前端测试套件')
+console.log('🧪 RAG News Intelligence Platform 前端测试套件')
 console.log('='.repeat(50))
 
 // 检查是否在正确的目录

@@ -1,4 +1,4 @@
-# XU News AI RAG - 前端界面
+# RAG News Intelligence Platform - 前端界面
 
 基于 Vue 3 + Vite + Element Plus 的现代化前端界面，采用科技极简风格设计。
 
@@ -136,10 +136,12 @@ cp env.example .env
 编辑 `.env` 文件，配置 API 基础地址：
 
 ```env
-VITE_API_BASE_URL=http://localhost:5000
-VITE_APP_TITLE=XU News AI RAG
+VITE_API_BASE_URL=/api
+VITE_APP_TITLE=RAG News Intelligence Platform
 VITE_APP_VERSION=1.0.0
 ```
+
+`/api` 在 native Vite 工作流中由开发代理转发，在容器工作流中由 Caddy 转发到 `backend:5000`。
 
 ### 开发模式
 
@@ -160,6 +162,16 @@ npm run build
 ```bash
 npm run preview
 ```
+
+### Docker Compose 生产构建
+
+容器运行使用 Vue production build + Caddy，不使用 Vite preview 或 Node 开发服务器。从仓库根目录运行：
+
+```bash
+docker compose up -d --build --wait
+```
+
+访问 `http://127.0.0.1:3000`。Caddy 提供静态文件、SPA fallback，并通过 `/api` 代理 Backend；Backend 暂时不可用时前端静态页面仍可启动和访问。
 
 ## 🧪 测试
 
@@ -206,7 +218,7 @@ npm run test:watch
 E2E测试使用 **Playwright** 进行真实浏览器测试，需要：
 
 1. **安装Playwright**: `npm install -D @playwright/test && npx playwright install`
-2. **启动后端**: `cd Backend && python app.py` (http://localhost:5000)
+2. **启动后端**: 在仓库根目录运行 `python -m Backend` (http://localhost:5000)
 3. **启动前端**: `cd Frontend && npm run dev` (http://localhost:3000)
 4. **运行测试**: `npm run test:e2e`
 

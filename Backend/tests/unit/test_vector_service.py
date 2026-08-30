@@ -10,7 +10,7 @@ import pytest
 import numpy as np
 import os
 import tempfile
-from Backend.services.vector_service import get_vector_service
+from Backend.services.vector_service import VectorService, get_vector_service
 
 
 class TestSprint2VectorService:
@@ -92,3 +92,30 @@ class TestSprint2VectorService:
                 print(f"[OK] 批量向量化成功，耗时: {batch_time:.3f}秒")
             except Exception as e:
                 pytest.skip(f"批量向量化测试失败: {str(e)}")
+
+
+def test_search_similar_supports_in_memory_integer_mapping_keys():
+    """新写入且尚未重启时，整数 mapping key 也必须能映射到知识 ID。"""
+    import faiss
+
+    vector_service = object.__new__(VectorService)
+    vector_service.faiss_index = faiss.IndexFlatIP(2)
+    vector_service.faiss_index.add(np.array([[1.0, 0.0]], dtype="float32"))
+    vector_service.id_mapping = {0: 42}
+
+    scores, knowledge_ids = vector_service.search_similar(
+        np.array([1.0, 0.0], dtype="float32"), top_k=1
+    )
+
+    assert scores.tolist() == pytest.approx([1.0])
+    assert knowledge_ids == [42]
+
+
+def test_delete_document_supports_string_id_for_integer_mapping(tmp_path):
+    """数据库返回字符串 vector_id 时，应能删除当前进程内的整数 mapping key。"""
+    vector_service = object.__new__(VectorService)
+    vector_service.id_mapping = {0: 42}
+    vector_service.id_mapping_path = str(tmp_path / "id_mapping.json")
+
+    assert vector_service.delete_document("0") is True
+    assert vector_service.id_mapping == {}

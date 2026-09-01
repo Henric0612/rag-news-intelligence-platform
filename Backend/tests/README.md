@@ -10,11 +10,16 @@
 - LLM服务使用 LangChain Ollama
 - RAG服务使用 LangChain LCEL (Expression Language)
 
-**测试统计**：
-- 总测试用例：91个
-- 已完成：85个（93%）
-- 测试覆盖率目标：> 80%
-- 考核要求覆盖：10/10（100%）
+**当前测试模块统计（按 repository tree）**：
+- Unit：13 个模块
+- Integration：5 个模块
+- API：8 个模块
+- E2E：6 个模块
+- Performance：4 个模块
+- 总计：36 个 pytest 测试模块
+- pytest 配置覆盖率门槛：80%
+
+以上数字是版本化 `test_*.py` 文件的 module inventory，不是 pytest collected case 数或通过数。下方 Sprint 场景目录保留为历史测试设计映射；其中的场景 ID 与状态图标不应被解读为本次执行结果。
 
 ---
 
@@ -24,53 +29,54 @@
 Backend/tests/
 ├── __init__.py                    # 测试包初始化
 ├── conftest.py                    # 测试配置和夹具
-├── unit/                          # 单元测试（40个用例）
-│   ├── test_environment.py        # Sprint 0：环境验证（6个）
-│   ├── test_auth_service.py       # Sprint 1：认证服务（4个）
-│   ├── test_models.py             # Sprint 1：数据模型（3个）
-│   ├── test_crawler_service.py    # Sprint 2：爬虫服务（2个）
-│   ├── test_file_service.py       # Sprint 2：文件服务（6个）
-│   ├── test_vector_service.py     # Sprint 2：向量化（4个，LangChain HuggingFaceEmbeddings）
-│   ├── test_search_service.py     # Sprint 2：检索服务（4个，LangChain CrossEncoderReranker）
-│   ├── test_llm_service.py        # Sprint 2：LLM服务（4个，LangChain Ollama）
-│   ├── test_knowledge_service.py  # Sprint 2：知识库（3个）
-│   ├── test_email_service.py      # Sprint 3：邮件服务（2个）
-│   ├── test_web_search_service.py # Sprint 3：联网搜索（2个）
-│   └── test_analytics_service.py  # Sprint 3：数据分析（3个）
-├── integration/                   # 集成测试（18个用例）
-│   ├── test_auth_integration.py   # Sprint 1：认证集成（2个）
-│   ├── test_rag_integration.py    # Sprint 2：RAG集成（7个，LangChain LCEL）
-│   ├── test_model_integration.py  # Sprint 2：模型集成（2个）
-│   ├── test_email_integration.py  # Sprint 3：邮件集成（3个）
-│   └── test_web_search_integration.py # Sprint 3：联网搜索集成（4个）
-├── api/                           # API测试（18个用例）
-│   ├── test_auth_api.py           # Sprint 1：认证API（3个）
-│   ├── test_health_api.py         # Sprint 1：健康检查API（2个）
-│   ├── test_knowledge_api.py      # Sprint 2：知识库API（4个）
-│   ├── test_crawler_api.py        # Sprint 2：爬虫和上传API（3个）
-│   ├── test_search_api.py         # Sprint 2：搜索API（2个）
-│   ├── test_rag_api.py            # Sprint 2：RAG API（2个）
-│   ├── test_model_status_api.py   # Sprint 2：模型状态API（1个）
-│   └── test_analytics_api.py      # Sprint 3：数据分析API（1个）
-├── e2e/                           # 端到端测试（7个用例）
-│   ├── test_search_e2e.py         # Sprint 2：智能搜索E2E（1个）
-│   ├── test_rag_qa_e2e.py         # Sprint 2：RAG问答E2E（1个）
-│   ├── test_frontend_e2e.py       # Sprint 3：前端界面E2E（2个）
-│   ├── test_knowledge_e2e.py      # Sprint 3：知识库管理E2E（1个）
-│   ├── test_crawler_e2e.py        # Sprint 3：爬虫管理E2E（1个）
-│   └── test_analytics_e2e.py      # Sprint 3：数据分析E2E（1个）
-└── performance/                   # 性能测试（6个用例）
-    ├── test_api_performance.py    # Sprint 4：API性能（3个）
-    ├── test_database_performance.py # Sprint 4：数据库性能（1个）
-    ├── test_vector_performance.py # Sprint 4：向量检索性能（1个）
-    └── test_concurrency_performance.py # Sprint 4：并发性能（1个）
+├── unit/                          # 13 个测试模块
+│   ├── test_environment.py
+│   ├── test_auth_service.py
+│   ├── test_models.py
+│   ├── test_crawler_service.py
+│   ├── test_file_service.py
+│   ├── test_vector_service.py
+│   ├── test_search_service.py
+│   ├── test_llm_service.py
+│   ├── test_rag_failure_contract.py
+│   ├── test_knowledge_service.py
+│   ├── test_email_service.py
+│   ├── test_web_search_service.py
+│   └── test_analytics_service.py
+├── integration/                   # 5 个测试模块
+│   ├── test_auth_integration.py
+│   ├── test_rag_integration.py
+│   ├── test_model_integration.py
+│   ├── test_email_integration.py
+│   └── test_web_search_integration.py
+├── api/                           # 8 个测试模块
+│   ├── test_auth_api.py
+│   ├── test_health_api.py
+│   ├── test_knowledge_api.py
+│   ├── test_crawler_api.py
+│   ├── test_search_api.py
+│   ├── test_rag_api.py
+│   ├── test_model_status_api.py
+│   └── test_analytics_api.py
+├── e2e/                           # 6 个测试模块
+│   ├── test_search_e2e.py
+│   ├── test_rag_qa_e2e.py
+│   ├── test_frontend_e2e.py
+│   ├── test_knowledge_e2e.py
+│   ├── test_crawler_e2e.py
+│   └── test_analytics_e2e.py
+└── performance/                   # 4 个测试模块
+    ├── test_api_performance.py
+    ├── test_database_performance.py
+    ├── test_vector_performance.py
+    └── test_concurrency_performance.py
 ```
 
 ---
 
 ## 🎯 按Sprint组织的测试
 
-### Sprint 0：项目准备与设计（6个用例）
+### Sprint 0：项目准备与设计
 
 **测试文件**：`unit/test_environment.py`
 
@@ -91,9 +97,9 @@ python -m pytest tests/unit/test_environment.py -v
 
 ---
 
-### Sprint 1：基础设施层（14个用例）
+### Sprint 1：基础设施层
 
-#### 单元测试（7个）
+#### 单元测试
 
 **测试文件**：
 - `unit/test_auth_service.py`（4个）
@@ -109,7 +115,7 @@ python -m pytest tests/unit/test_environment.py -v
 | MODEL-002 | KnowledgeItem模型CRUD | ✅ |
 | MODEL-003 | SearchHistory模型CRUD | ✅ |
 
-#### 集成测试（2个）
+#### 集成测试
 
 **测试文件**：`integration/test_auth_integration.py`
 
@@ -118,7 +124,7 @@ python -m pytest tests/unit/test_environment.py -v
 | AUTH-INT-001 | 完整认证流程 | ✅ |
 | AUTH-INT-002 | Token刷新机制 | ✅ |
 
-#### API测试（5个）
+#### API测试
 
 **测试文件**：`api/test_auth_api.py`, `api/test_health_api.py`
 
@@ -144,9 +150,9 @@ python -m pytest tests/api/test_auth_api.py tests/api/test_health_api.py -v
 
 ---
 
-### Sprint 2：数据与AI服务层（42个用例）
+### Sprint 2：数据与AI服务层
 
-#### 2.1 数据采集服务（8个单元测试）
+#### 2.1 数据采集服务
 
 **测试文件**：
 - `unit/test_crawler_service.py`（2个）
@@ -163,7 +169,7 @@ python -m pytest tests/api/test_auth_api.py tests/api/test_health_api.py -v
 | FILE-003-3 | 文本分块-Overlap验证（参数自动调整） | ✅ |
 | FILE-003-4 | 文本分块-性能测试（<100ms/3000字符） | ✅ |
 
-#### 2.2 向量化与检索（8个单元测试，基于LangChain框架）
+#### 2.2 向量化与检索（基于LangChain框架）
 
 **测试文件**：`unit/test_vector_service.py`, `unit/test_search_service.py`
 
@@ -178,7 +184,7 @@ python -m pytest tests/api/test_auth_api.py tests/api/test_health_api.py -v
 | SEARCH-003 | 检索性能<200ms | ✅ |
 | SEARCH-004 | 空结果处理 | ✅ |
 
-#### 2.3 LLM与RAG（4个单元测试 + 7个集成测试，基于LangChain框架）
+#### 2.3 LLM与RAG（基于LangChain框架）
 
 **测试文件**：`unit/test_llm_service.py`, `integration/test_rag_integration.py`
 
@@ -196,7 +202,7 @@ python -m pytest tests/api/test_auth_api.py tests/api/test_health_api.py -v
 | RAG-INT-006 | RAG组件集成 | ✅ |
 | RAG-INT-007 | 相关性排序验证 | ✅ |
 
-#### 2.4 知识库管理（3个单元测试 + 4个API测试）
+#### 2.4 知识库管理
 
 **测试文件**：`unit/test_knowledge_service.py`, `api/test_knowledge_api.py`
 
@@ -207,7 +213,7 @@ python -m pytest tests/api/test_auth_api.py tests/api/test_health_api.py -v
 | KNOW-API-003 | PUT /api/knowledge/:id | ✅ |
 | KNOW-API-004 | DELETE /api/knowledge/:id | ✅ |
 
-#### 2.5 数据采集API（3个API测试）
+#### 2.5 数据采集API
 
 **测试文件**：`api/test_crawler_api.py`
 
@@ -217,7 +223,7 @@ python -m pytest tests/api/test_auth_api.py tests/api/test_health_api.py -v
 | CRAWL-API-002 | GET /api/crawler/tasks | ✅ |
 | UPLOAD-API-001 | POST /api/upload | ✅ |
 
-#### 2.6 Sprint 2 E2E测试（2个）
+#### 2.6 Sprint 2 E2E测试
 
 **测试文件**：`e2e/test_search_e2e.py`, `e2e/test_rag_qa_e2e.py`
 
@@ -251,9 +257,9 @@ python -m pytest tests/e2e/test_rag_qa_e2e.py -v
 
 ---
 
-### Sprint 3：应用功能层（23个用例）
+### Sprint 3：应用功能层
 
-#### 3.1 前端界面E2E（5个）
+#### 3.1 前端界面E2E
 
 **测试文件**：`e2e/test_frontend_e2e.py`, `e2e/test_knowledge_e2e.py`, `e2e/test_crawler_e2e.py`, `e2e/test_analytics_e2e.py`
 
@@ -265,7 +271,7 @@ python -m pytest tests/e2e/test_rag_qa_e2e.py -v
 | E2E-006 | 爬虫管理界面流程 | ✅ |
 | E2E-007 | 数据分析页面展示 | ✅ |
 
-#### 3.2 入库邮件通知（2个单元测试 + 3个集成测试）
+#### 3.2 入库邮件通知
 
 **测试文件**：`unit/test_email_service.py`, `integration/test_email_integration.py`
 
@@ -277,7 +283,7 @@ python -m pytest tests/e2e/test_rag_qa_e2e.py -v
 | EMAIL-INT-002 | 邮件失败不阻塞主流程 | ✅ |
 | EMAIL-INT-003 | 邮件内容必需字段 | ✅ |
 
-#### 3.3 联网查询回退（2个单元测试 + 4个集成测试）
+#### 3.3 联网查询回退
 
 **测试文件**：`unit/test_web_search_service.py`, `integration/test_web_search_integration.py`
 
@@ -290,7 +296,7 @@ python -m pytest tests/e2e/test_rag_qa_e2e.py -v
 | WEB-INT-003 | 联网搜索结果格式 | ✅ |
 | WEB-INT-004 | 中文查询联网搜索 | ✅ |
 
-#### 3.4 数据聚类分析（3个单元测试 + 1个API测试）
+#### 3.4 数据聚类分析
 
 **测试文件**：`unit/test_analytics_service.py`, `api/test_analytics_api.py`
 
@@ -324,9 +330,9 @@ python -m pytest tests/e2e/test_analytics_e2e.py -v
 
 ---
 
-### Sprint 4：质量保证与交付（6个用例）
+### Sprint 4：质量保证与交付
 
-#### 4.1 API性能测试（3个）
+#### 4.1 API性能测试
 
 **测试文件**：`performance/test_api_performance.py`
 
@@ -336,7 +342,7 @@ python -m pytest tests/e2e/test_analytics_e2e.py -v
 | PERF-002 | 搜索响应时间 | < 200ms | ⏳ |
 | PERF-003 | RAG问答响应 | < 30s | ⏳ |
 
-#### 4.2 数据库性能测试（1个）
+#### 4.2 数据库性能测试
 
 **测试文件**：`performance/test_database_performance.py`
 
@@ -344,7 +350,7 @@ python -m pytest tests/e2e/test_analytics_e2e.py -v
 |-----------|---------|---------|------|
 | PERF-004 | 数据库查询优化 | 索引优化完成 | ⏳ |
 
-#### 4.3 向量检索性能测试（1个）
+#### 4.3 向量检索性能测试
 
 **测试文件**：`performance/test_vector_performance.py`
 
@@ -352,7 +358,7 @@ python -m pytest tests/e2e/test_analytics_e2e.py -v
 |-----------|---------|---------|------|
 | PERF-005 | FAISS索引优化 | 检索速度提升 | ⏳ |
 
-#### 4.4 并发性能测试（1个）
+#### 4.4 并发性能测试
 
 **测试文件**：`performance/test_concurrency_performance.py`
 
@@ -498,7 +504,7 @@ HF_DATASETS_OFFLINE=1     # 禁用Datasets联网
 3. **LLM模型**: `qwen3:8b` (Ollama)
 
 #### 模型准备
-运行测试前，请确保已下载所需模型到本地。参见: [Backend/README.md - 下载AI模型](../README.md#3-下载ai模型)
+运行测试前，请确保已下载所需模型到本地。参见: [Backend/README.md - 下载AI模型](../README.md#3-下载ai模型到本地重要)
 
 ---
 
@@ -558,8 +564,7 @@ def test_function_name():
 **创建时间**：2025-01-06  
 **最后更新**：2025-01-08  
 **对齐文档**：敏捷开发指导书_v3.md、测试计划文档_v3.md  
-**当前Sprint**：Sprint 3 已完成，Sprint 4 待开始  
-**测试状态**：✅ 核心功能测试完成（85/91），⏳ 性能测试待开始（6/91）
+**测试执行状态**：本文档不发布当前 collected/passed case 数；实际结果必须以相应环境中的 pytest 输出为准。
 
 ---
 
@@ -578,18 +583,15 @@ def test_function_name():
 - 性能测试：`TestSprint4APIPerformance`
 
 #### 2. **职责清晰** ✅
-- **32个测试文件**，每个文件职责单一
+- **36 个测试模块**，每个文件职责单一
 - 按Sprint组织，便于追溯和维护
 - 按测试类型分类，结构清晰
 - 单一服务原则：1个服务 = 1个测试文件
 
-#### 3. **覆盖完整** ✅
-- **91个测试用例**，覆盖所有10项考核要求
-- 单元测试：40个（基础功能验证）
-- 集成测试：18个（模块协作验证）
-- API测试：18个（接口验证）
-- E2E测试：7个（用户流程验证）
-- 性能测试：6个（性能指标验证）
+#### 3. **模块覆盖范围** ✅
+- Unit、integration、API、E2E 与 performance 五类 pytest 模块均存在
+- 新增的 `unit/test_rag_failure_contract.py` 已纳入当前 inventory
+- 具体 case collection 与通过状态不在静态文档中推断
 
 #### 4. **质量保证** ✅
 - 减少Mock使用，使用真实服务
@@ -599,14 +601,14 @@ def test_function_name():
 
 ### 测试文件映射
 
-| 测试类型 | 文件数 | Sprint分布 | 测试用例数 |
-|---------|-------|-----------|----------|
-| 单元测试 | 12个 | Sprint 0-3 | 40个 |
-| 集成测试 | 5个 | Sprint 1-3 | 18个 |
-| API测试 | 8个 | Sprint 1-3 | 18个 |
-| E2E测试 | 6个 | Sprint 2-3 | 7个 |
-| 性能测试 | 4个 | Sprint 4 | 6个 |
-| **总计** | **32个** | **全覆盖** | **91个** |
+| 测试类型 | 模块数 | Sprint分布 |
+|---------|------:|-----------|
+| 单元测试 | 13 | Sprint 0-3 |
+| 集成测试 | 5 | Sprint 1-3 |
+| API测试 | 8 | Sprint 1-3 |
+| E2E测试 | 6 | Sprint 2-3 |
+| 性能测试 | 4 | Sprint 4 |
+| **总计** | **36** | **全覆盖** |
 
 ### 关键改进
 

@@ -10,6 +10,10 @@ RAG News Intelligence Platform turns fragmented RSS feeds, web pages, and upload
 
 The portfolio focus is the end-to-end engineering workflow: ingestion, persistence, vector indexing, two-stage retrieval, context construction, local generation, API integration, failure handling, and layered software testing.
 
+## Why This Project Matters
+
+The project evolved from an academic full-stack RAG application into a more reproducible and verifiable local AI engineering system. Phase B added explicit container boundaries, persistent state, dependency-failure semantics, and complementary native-development and container-validation workflows—it is more than a demo placed inside Docker.
+
 ## Problem
 
 News research often spans disconnected sources and relies on exact-keyword search. That makes it difficult to organize material locally, retrieve conceptually related items, and trace an answer back to supporting records.
@@ -100,34 +104,18 @@ The current query path embeds the question, retrieves candidate IDs from an `Ind
 
 ## Testing & Validation
 
-The repository contains **51 categorized test modules** rather than relying on a single happy-path demo:
+The repository contains **52 categorized test modules** rather than relying on a single happy-path demo:
 
 | Area | Unit | Integration | API | E2E | Performance | Security | Total |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Backend | 12 | 5 | 8 | 6 | 4 | 0 | 35 |
+| Backend | 13 | 5 | 8 | 6 | 4 | 0 | 36 |
 | Frontend | 7 | 6 | 0 | 1 | 1 | 1 | 16 |
 
 Backend pytest configuration includes an 80% coverage failure threshold. Frontend tooling can generate a Vitest coverage report, and the repository includes a Playwright end-to-end specification; Playwright must currently be installed separately before that specification can run.
 
 These are repository-level test assets and configuration evidence, not a claim that every suite currently passes in CI. The automated tests primarily validate software behavior. Retrieval relevance, answer groundedness, and end-to-end RAG quality are not yet covered by a dedicated evaluation framework.
 
-### Test commands
-
-```bash
-# Backend
-cd Backend
-python run_tests.py
-
-# Frontend unit/integration/performance/security suites
-cd ../Frontend
-npm run test:all
-npm run test:coverage
-
-# Optional browser E2E setup
-npm install -D @playwright/test
-npx playwright install
-npm run test:e2e
-```
+Current counts describe versioned test modules, not collected or passing test cases. Commands, prerequisites, and suite-specific caveats are maintained in the [Backend implementation reference](Backend/README.md#testing) and [Frontend implementation reference](Frontend/README.md#testing).
 
 ## Current Engineering Evidence
 
@@ -140,7 +128,7 @@ npm run test:e2e
 
 No latency, throughput, retrieval-quality, or answer-quality benchmark is claimed in this phase.
 
-## Containerized Local Workflow
+## Quick Start: Containerized Local Workflow
 
 ### Prerequisites
 
@@ -158,7 +146,7 @@ cd rag-news-intelligence-platform
 cp .env.example .env
 ```
 
-Replace the two secret placeholders in `.env` for anything beyond an isolated local demo. The file is ignored by Git.
+Replace both secret placeholders in `.env`; Compose intentionally fails configuration when either value is missing. The file is ignored by Git.
 
 Prepare Ollama on the WSL host:
 
@@ -169,75 +157,18 @@ ollama serve
 
 ### 2. Validate and start the stack
 
-The backend image provisions pinned revisions of the embedding and reranking models at build time and runs them offline at runtime.
-
 ```bash
-docker compose config
-docker compose build
-docker compose up -d --wait
+docker compose config --quiet
+docker compose up -d --build --wait
 ```
 
-Open `http://127.0.0.1:3000`. This is the primary UI and API entrypoint. `http://127.0.0.1:5000` is also published on loopback for local debugging and health inspection; it is not a public production API exposure.
-
-Useful checks:
+Open `http://127.0.0.1:3000`, then perform one lightweight liveness check:
 
 ```bash
 curl http://127.0.0.1:3000/api/health
-curl http://127.0.0.1:5000/api/health
-curl 'http://127.0.0.1:5000/api/ready?quick=true'
-curl 'http://127.0.0.1:5000/api/ready?quick=false'
 ```
 
-`/api/health` is process liveness and remains healthy during a temporary AI dependency failure. Quick readiness checks the database and core configuration without initializing AI. Full readiness checks the embedding model, reranker, Host Ollama, and the expected `qwen3:8b` model; it returns HTTP 503 when a required dependency is unavailable.
-
-For RAG failures, non-stream requests return HTTP 503 with `success:false` and `data.error_code: "AI_DEPENDENCY_UNAVAILABLE"`. Streaming requests emit a structured `type:error` event.
-
-### 3. Persistence and lifecycle
-
-The `rag_data` named volume stores SQLite, the FAISS index, the ID mapping, and uploads as one logical persistence boundary. Ordinary restarts and `docker compose down` / `docker compose up` preserve it.
-
-Do not run `docker compose down -v` when the local RAG state must be retained; `-v` removes the named volume.
-
-```bash
-docker compose ps
-docker compose logs backend frontend
-docker compose down
-```
-
-## Native WSL Development Workflow
-
-Native WSL remains the preferred fast development and debugging loop. It requires Python 3.13, Node.js, locally cached Hugging Face models, and the same Host Ollama service.
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r Backend/requirements.txt
-
-python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
-python -c "from sentence_transformers import CrossEncoder; CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
-
-python -m Backend
-```
-
-In a second terminal:
-
-```bash
-cd Frontend
-npm install
-cp env.example .env
-npm run dev
-```
-
-> **Development data warning:** `Backend/init_db.py` drops and recreates the local database before creating demo users. Do not run it against data you need to preserve.
-
-### Development-only demo credentials
-
-| Role | Username | Password |
-| --- | --- | --- |
-| Administrator | `admin` | `admin123` |
-| Test user | `testuser` | `test123` |
-
-These credentials are created only for isolated local development. They must be changed or removed before any shared or externally accessible deployment.
+The backend image provisions fixed revisions of the embedding and reranking models and uses them offline at runtime. For readiness semantics, RAG failure responses, persistence lifecycle warnings, native Python setup, and backend tests, see [Backend/README.md](Backend/README.md). For Vite development, `/api` proxying, frontend tests, and Caddy serving, see [Frontend/README.md](Frontend/README.md).
 
 ## Repository Structure
 

@@ -236,6 +236,7 @@ Backend/data/faiss/*.json
 Backend/data/faiss/*.backup
 Backend/data/sqlite/*.db
 Backend/data/uploads/*
+Backend/data/cache/
 
 # Jupyter Notebook
 .ipynb_checkpoints

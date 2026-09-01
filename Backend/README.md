@@ -1,6 +1,6 @@
-# RAG News Intelligence Platform 后端
+# RAG News Intelligence Platform — Backend
 
-基于 Flask 3.x 的智能新闻问答系统后端服务。
+基于 Flask 3.x 的后端实现与运行参考，覆盖本地开发、API、健康与就绪语义、RAG 失败契约、测试、容器行为和持久化警告。项目整体定位、架构与路线图见[根目录 README](../README.md)。
 
 ## 技术栈
 
@@ -42,12 +42,12 @@
 │   ├── text_utils.py
 │   ├── response.py
 │   └── decorators.py
-├── tests/              # 测试套件（88个用例）
-│   ├── unit/           # 单元测试 (37个)
-│   ├── integration/    # 集成测试 (18个)
-│   ├── api/            # API测试 (18个)
-│   ├── e2e/            # E2E测试 (7个)
-│   ├── performance/    # 性能测试 (6个)
+├── tests/              # 36 个 pytest 测试模块
+│   ├── unit/           # 13 个模块
+│   ├── integration/    # 5 个模块
+│   ├── api/            # 8 个模块
+│   ├── e2e/            # 6 个模块
+│   ├── performance/    # 4 个模块
 │   ├── conftest.py     # 测试配置（本地离线模型）
 │   └── README.md       # 测试文档
 └── data/               # 数据目录（自动创建）
@@ -116,17 +116,21 @@ ollama serve
 
 ### 4. 初始化数据库
 
+> **⚠️ 破坏性操作：** `python init_db.py` 会执行 `db.drop_all()`，删除现有本地数据库表并重新创建数据库与演示账户。仅可用于可丢弃的隔离开发数据；不要对需要保留的数据运行。
+
 ```bash
 python init_db.py
 ```
 
-### 5. 配置环境变量（可选）
+### 5. 配置本地环境变量
 
 复制 `env.example` 为 `.env` 并修改配置：
 
 ```bash
 cp env.example .env
 ```
+
+Native 开发默认从 `Backend/env.example` 获取参考配置。至少应为共享或外部可访问环境替换 `SECRET_KEY` 与 `JWT_SECRET_KEY`；Compose 工作流使用根目录 `.env.example`，并强制显式提供这两个值。
 
 ### 6. 运行应用
 
@@ -279,7 +283,17 @@ GET /api/ready?quick=false
 - full readiness 检查 embedding、reranker、Host Ollama 与 `qwen3:8b`，依赖不可用时返回 503。
 - 非流式 RAG 的 AI 依赖失败返回 HTTP 503、`success:false` 与 `AI_DEPENDENCY_UNAVAILABLE`；SSE 返回结构化 `type:error` 事件。
 
-## 默认账户
+调试示例：
+
+```bash
+curl http://127.0.0.1:5000/api/health
+curl 'http://127.0.0.1:5000/api/ready?quick=true'
+curl 'http://127.0.0.1:5000/api/ready?quick=false'
+```
+
+## 开发专用演示账户
+
+以下账户只有在显式运行破坏性的 `python init_db.py` 后才会创建：
 
 - 管理员账户
   - 用户名: `admin`
@@ -289,20 +303,20 @@ GET /api/ready?quick=false
   - 用户名: `testuser`
   - 密码: `test123`
 
-## 开发指南
+## Testing
 
-### 运行测试
+当前仓库包含 36 个后端测试模块：13 个 unit、5 个 integration、8 个 API、6 个 E2E 和 4 个 performance 模块。这是按版本化测试文件统计的 module inventory，不代表当前 pytest collected case 数或通过数。
 
 ```bash
 # 运行所有测试
 python run_tests.py
 
 # 按类型运行
-python run_tests.py --unit          # 单元测试 (37个)
-python run_tests.py --integration   # 集成测试 (18个)
-python run_tests.py --api           # API测试 (18个)
-python run_tests.py --e2e           # E2E测试 (7个)
-python run_tests.py --performance   # 性能测试 (6个)
+python run_tests.py --unit
+python run_tests.py --integration
+python run_tests.py --api
+python run_tests.py --e2e
+python run_tests.py --performance
 
 # 按Sprint运行
 python run_tests.py --sprint 2      # Sprint 2测试
@@ -337,11 +351,36 @@ docker compose config
 docker compose up -d --build --wait
 ```
 
-主入口为 `http://127.0.0.1:3000`。Backend 的 `127.0.0.1:5000` 仅用于本地工程检查。Ollama 保留为 WSL host service，不在 Compose 中；SQLite、FAISS、mapping 与 uploads 统一持久化在 `rag_data` 命名卷。完整前置条件、生命周期与数据保留说明见根目录 `README.md`。
+主入口为 `http://127.0.0.1:3000`。Backend 的 `127.0.0.1:5000` 仅用于本地工程检查。Ollama 保留为 WSL host service，不在 Compose 中；SQLite、FAISS、mapping 与 uploads 统一持久化在 `rag_data` 命名卷。完整前置条件与精简启动流程见[根目录 README](../README.md#quick-start-containerized-local-workflow)，生命周期与数据保留说明见下文。
+
+Backend 镜像使用 Python 3.13、固定 revision 的 embedding/reranker 模型、离线 Hugging Face runtime、非 root 用户和 single-worker Gunicorn。`OLLAMA_HOST` 默认为 `http://host.docker.internal:11434`，使容器访问 WSL host 上的 Ollama。
+
+### 持久化与生命周期
+
+`rag_data` 命名卷将 SQLite、FAISS index、ID mapping 与 uploads 作为一个逻辑持久化边界挂载到 `/app/Backend/data`。普通重启及 `docker compose down` 后数据仍保留。
+
+> **⚠️ 破坏性操作：** `docker compose down -v` 会删除 `rag_data` 命名卷。需要保留本地 RAG 状态时不要使用 `-v`。
+
+```bash
+docker compose ps
+docker compose logs backend
+docker compose down
+```
+
+### 关键 Compose 环境变量
+
+| 变量 | 行为 |
+| --- | --- |
+| `SECRET_KEY` | 必须通过根目录 `.env` 或 shell 环境显式提供 |
+| `JWT_SECRET_KEY` | 必须通过根目录 `.env` 或 shell 环境显式提供，且应与 `SECRET_KEY` 不同 |
+| `OLLAMA_HOST` | 默认 `http://host.docker.internal:11434` |
+| `LLM_MODEL` | 默认 `qwen3:8b` |
+| `RAG_DATA_DIR` | 容器内固定为 `/app/Backend/data` |
+| `CORS_ORIGINS` / `FRONTEND_URL` | 默认指向 loopback frontend |
 
 ## 注意事项
 
-1. 本地 demo 以外必须替换 `SECRET_KEY` 和 `JWT_SECRET_KEY` 示例值。
+1. Compose 启动前必须在根目录 `.env` 或 shell 环境中显式设置不同的 `SECRET_KEY` 与 `JWT_SECRET_KEY`；不要保留 `.env.example` placeholder。
 2. 当前 SQLite + FAISS + mapping 部署约束为 single worker / single replica。
 3. Redis、Celery 与 APScheduler 未进入 Phase B 运行拓扑。
 4. 项目是 production-oriented，但不是 production-ready。

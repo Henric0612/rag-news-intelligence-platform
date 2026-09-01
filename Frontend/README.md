@@ -1,6 +1,6 @@
-# RAG News Intelligence Platform - 前端界面
+# RAG News Intelligence Platform — Frontend
 
-基于 Vue 3 + Vite + Element Plus 的现代化前端界面，采用科技极简风格设计。
+基于 Vue 3 + Vite + Element Plus 的前端实现与运行参考，覆盖 native development、构建、`/api` 请求、测试和 Caddy 容器行为。项目整体定位、架构与路线图见[根目录 README](../README.md)。
 
 ## 技术栈
 
@@ -115,14 +115,14 @@ Frontend/
 
 ### 环境要求
 
-- Node.js >= 16.0.0
-- npm >= 8.0.0
+- Node.js 24（与容器构建环境一致）
+- npm（随 Node.js 安装）
 
 ### 安装依赖
 
 ```bash
 cd Frontend
-npm install
+npm ci
 ```
 
 ### 环境配置
@@ -141,7 +141,7 @@ VITE_APP_TITLE=RAG News Intelligence Platform
 VITE_APP_VERSION=1.0.0
 ```
 
-`/api` 在 native Vite 工作流中由开发代理转发，在容器工作流中由 Caddy 转发到 `backend:5000`。
+前端代码使用相对 `/api` 请求：native Vite 工作流将其代理到 `http://localhost:5000`，容器工作流由 Caddy 通过 Docker DNS 转发到 `backend:5000`。这两条路径保持同一浏览器侧 API contract；不要在容器构建中写入宿主 Backend URL。
 
 ### 开发模式
 
@@ -165,7 +165,7 @@ npm run preview
 
 ### Docker Compose 生产构建
 
-容器运行使用 Vue production build + Caddy，不使用 Vite preview 或 Node 开发服务器。从仓库根目录运行：
+容器运行使用 Node 24 执行 `npm ci` 与 Vite production build，再由 Caddy 提供静态文件和 SPA fallback；runtime 不使用 Vite preview 或 Node 开发服务器。从仓库根目录运行：
 
 ```bash
 docker compose up -d --build --wait
@@ -173,7 +173,7 @@ docker compose up -d --build --wait
 
 访问 `http://127.0.0.1:3000`。Caddy 提供静态文件、SPA fallback，并通过 `/api` 代理 Backend；Backend 暂时不可用时前端静态页面仍可启动和访问。
 
-## 🧪 测试
+## Testing
 
 ### 运行所有测试
 
@@ -227,7 +227,7 @@ E2E测试使用 **Playwright** 进行真实浏览器测试，需要：
 ### 测试覆盖率
 
 - **目标覆盖率**: 80%+
-- **测试文件数**: 16个
+- **版本化测试模块数**: 16个（module inventory，不代表当前 collected/passing case 数）
   - 单元测试: 7个（Store、基础设施）
   - 集成测试: 6个（认证、搜索、问答、知识库、爬虫、分析）
   - E2E测试: 1个（完整用户流程，Playwright）

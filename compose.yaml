@@ -7,8 +7,8 @@ services:
       dockerfile: Dockerfile
     environment:
       FLASK_ENV: production
-      SECRET_KEY: ${SECRET_KEY:-local-compose-secret-change-me}
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-local-compose-jwt-secret-change-me}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env or the environment}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env or the environment}
       RAG_DATA_DIR: /app/Backend/data
       OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
       LLM_MODEL: ${LLM_MODEL:-qwen3:8b}

@@ -137,12 +137,7 @@ Native 开发默认从 `Backend/env.example` 获取参考配置。至少应为�
 > **⚠️ 重要**：必须使用模块模式运行，不要直接运行 `python app.py`
 
 ```bash
-# ✅ 方式1：在项目根目录运行（推荐）
-cd 项目根目录
-python -m Backend
-
-# ✅ 方式2：在Backend目录运行
-cd Backend
+# 在 repository root 运行
 python -m Backend
 ```
 

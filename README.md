@@ -189,7 +189,7 @@ The backend image provisions fixed revisions of the embedding and reranking mode
 ├── compose.yaml         # Local backend/frontend orchestration and rag_data volume
 ├── .env.example         # Safe Compose configuration template
 ├── Docs/                # Detailed academic and engineering documentation
-└── Product Prototype/   # Earlier static product prototype
+└── product-prototype/   # Earlier static product prototype
 ```
 
 ## AI-Assisted Development

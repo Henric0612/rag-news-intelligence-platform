@@ -70,7 +70,7 @@
 
 **目录结构**
 ```
-产品原型/
+product-prototype/
 ├── pages/          # 6个核心页面
 ├── components/     # navbar.js, footer.js
 ├── assets/         # styles.css
@@ -85,7 +85,7 @@
 
 ```bash
 # 方法1：Python
-cd 产品原型
+cd product-prototype
 python -m http.server 8080
 # 访问 http://localhost:8080/pages/index.html
 

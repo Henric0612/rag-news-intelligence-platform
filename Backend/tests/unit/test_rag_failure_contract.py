@@ -1,5 +1,7 @@
 """Focused Stage 8 regression tests for RAG dependency failures."""
 
+import pytest
+
 from unittest.mock import Mock, patch
 
 from Backend.services.llm_service import LLMService
@@ -25,6 +27,7 @@ def _rag_service_with_result(result):
     return service
 
 
+@pytest.mark.ci
 def test_non_stream_ai_failure_returns_503_contract(client, auth_headers):
     rag_service = Mock()
     rag_service.answer_question.return_value = {
@@ -45,6 +48,7 @@ def test_non_stream_ai_failure_returns_503_contract(client, auth_headers):
     assert body['data']['error_code'] == 'AI_DEPENDENCY_UNAVAILABLE'
 
 
+@pytest.mark.ci
 def test_non_stream_success_contract_remains_compatible(client, auth_headers):
     rag_service = Mock()
     rag_service.answer_question.return_value = {
@@ -65,6 +69,7 @@ def test_non_stream_success_contract_remains_compatible(client, auth_headers):
     assert body['data']['answer'] == 'normal answer'
 
 
+@pytest.mark.ci
 def test_service_preserves_ai_dependency_failure():
     service = _rag_service_with_result({'error': 'Ollama connection refused'})
 
@@ -76,6 +81,7 @@ def test_service_preserves_ai_dependency_failure():
     assert result['error_code'] == 'AI_DEPENDENCY_UNAVAILABLE'
 
 
+@pytest.mark.ci
 def test_stream_ai_failure_emits_error_without_done_event():
     service = _rag_service_with_result({})
 
@@ -99,6 +105,7 @@ def test_stream_ai_failure_emits_error_without_done_event():
     assert not any(event.get('type') == 'done' for event in events)
 
 
+@pytest.mark.ci
 def test_llm_request_reinitializes_after_dependency_recovers():
     service = LLMService.__new__(LLMService)
     service.llm = None

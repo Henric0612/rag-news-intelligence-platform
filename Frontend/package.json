@@ -9,9 +9,9 @@
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-path .gitignore",
     "test": "vitest run tests/",
     "test:all": "vitest run tests/",
-    "test:unit": "vitest run",
+    "test:unit": "vitest run tests/unit",
     "test:unit:all": "vitest run tests/unit",
-    "test:integration": "vitest run",
+    "test:integration": "vitest run tests/integration",
     "test:integration:all": "vitest run tests/integration",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
@@ -24,7 +24,8 @@
     "test:security": "vitest run",
     "test:security:all": "vitest run tests/security",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage tests/"
+    "test:coverage": "vitest run --coverage tests/",
+    "test:ci": "node -e \"for (const f of ['coverage/junit.xml', 'coverage/lcov.info']) require('node:fs').rmSync(f, {force:true})\" && vitest run --mode ci --coverage && node -e \"for (const f of ['coverage/junit.xml', 'coverage/lcov.info']) { if (!require('node:fs').statSync(f).size) throw new Error('Empty required report: ' + f) }\""
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",

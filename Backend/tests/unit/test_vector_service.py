@@ -94,6 +94,7 @@ class TestSprint2VectorService:
                 pytest.skip(f"批量向量化测试失败: {str(e)}")
 
 
+@pytest.mark.ci
 def test_search_similar_supports_in_memory_integer_mapping_keys():
     """新写入且尚未重启时，整数 mapping key 也必须能映射到知识 ID。"""
     import faiss
@@ -111,6 +112,7 @@ def test_search_similar_supports_in_memory_integer_mapping_keys():
     assert knowledge_ids == [42]
 
 
+@pytest.mark.ci
 def test_delete_document_supports_string_id_for_integer_mapping(tmp_path):
     """数据库返回字符串 vector_id 时，应能删除当前进程内的整数 mapping key。"""
     vector_service = object.__new__(VectorService)

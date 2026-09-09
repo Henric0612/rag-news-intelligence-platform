@@ -1,8 +1,11 @@
 """Health/readiness API tests."""
+import pytest
+
 from unittest.mock import Mock, patch
 
 
 class TestSprint1HealthAPI:
+    @pytest.mark.ci
     def test_health_check(self, client):
         response = client.get('/api/health')
         assert response.status_code == 200
@@ -12,6 +15,7 @@ class TestSprint1HealthAPI:
         assert 'timestamp' in result['data']
         assert 'version' in result['data'] or 'uptime' in result['data']
 
+    @pytest.mark.ci
     def test_readiness_check(self, client):
         response = client.get('/api/ready')
         assert response.status_code == 200
@@ -20,6 +24,7 @@ class TestSprint1HealthAPI:
         assert result['data']['status'] == 'ready'
         assert result['data']['database'] in ['connected', 'ready', True]
 
+    @pytest.mark.ci
     def test_health_check_includes_system_info(self, client):
         response = client.get('/api/health')
         assert response.status_code == 200
@@ -27,10 +32,12 @@ class TestSprint1HealthAPI:
         assert 'status' in data
         assert 'timestamp' in data
 
+    @pytest.mark.ci
     def test_health_endpoints_no_auth_required(self, client):
         assert client.get('/api/health').status_code == 200
         assert client.get('/api/ready').status_code == 200
 
+    @pytest.mark.ci
     def test_quick_readiness_does_not_initialize_ai(self, client):
         with patch('Backend.services.vector_service.get_vector_service') as vector_mock, \
              patch('Backend.services.search_service.get_search_service') as search_mock:
@@ -41,6 +48,7 @@ class TestSprint1HealthAPI:
         search_mock.assert_not_called()
         assert response.get_json()['data']['quick_mode'] is True
 
+    @pytest.mark.ci
     def test_full_readiness_requires_ai_dependencies(self, client):
         vector_service = Mock(embedding_model=Mock())
         search_service = Mock(rerank_model=Mock())
@@ -60,6 +68,7 @@ class TestSprint1HealthAPI:
         assert data['ollama'] == 'ready'
         assert data['llm_model'] == 'ready'
 
+    @pytest.mark.ci
     def test_full_readiness_returns_503_when_ollama_is_unavailable(self, client):
         vector_service = Mock(embedding_model=Mock())
         search_service = Mock(rerank_model=Mock())

@@ -1,14 +1,13 @@
 # Coverage.py 配置文件
 
 [run]
-source = .
+source = Backend
 omit = 
     */tests/*
     */venv/*
     */__pycache__/*
     */site-packages/*
     */migrations/*
-    */config.py
     */run_*.py
     */.env*
 

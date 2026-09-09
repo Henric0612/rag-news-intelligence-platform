@@ -1,7 +1,7 @@
 /**
  * 测试环境设置
  */
-import { vi } from 'vitest'
+import { beforeEach, afterEach, vi } from 'vitest'
 
 // Mock localStorage
 const localStorageMock = {
@@ -77,18 +77,43 @@ global.console = {
   })
 }
 
-// 抑制未处理的Promise rejection警告（在测试环境中）
-process.on('unhandledRejection', (reason) => {
-  // 忽略网络相关的rejection
-  if (reason && (
-    reason.message?.includes('AggregateError') ||
-    reason.message?.includes('ECONNREFUSED') ||
-    reason.code === 'ECONNREFUSED'
-  )) {
-    return
+const activeTimers = new Map()
+for (const [setName, clearName] of [['setTimeout', 'clearTimeout'], ['setInterval', 'clearInterval']]) {
+  const schedule = globalThis[setName].bind(globalThis)
+  const cancel = globalThis[clearName].bind(globalThis)
+  globalThis[setName] = (callback, delay, ...args) => {
+    const id = schedule(callback, delay, ...args)
+    activeTimers.set(id, cancel)
+    return id
   }
-  // 其他rejection仍然抛出
-  if (process.env.DEBUG_TESTS) {
-    originalConsole.error('Unhandled Rejection:', reason)
-  }
+}
+
+// Restore implementations and storage objects, including tests replacing methods directly.
+const storageMethods = storage => Object.fromEntries(
+  ['getItem', 'setItem', 'removeItem', 'clear'].map(key => [key, storage[key].getMockImplementation()])
+)
+const localMethods = storageMethods(localStorageMock)
+const sessionMethods = storageMethods(sessionStorageMock)
+
+beforeEach(() => {
+  vi.resetAllMocks()
+  for (const [key, fn] of Object.entries(localMethods)) localStorageMock[key] = vi.fn(fn)
+  for (const [key, fn] of Object.entries(sessionMethods)) sessionStorageMock[key] = vi.fn(fn)
+  localStorageMock._data = {}
+  sessionStorageMock._data = {}
+  global.localStorage = localStorageMock
+  global.sessionStorage = sessionStorageMock
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
+  // Dispose real timers created by stores; fake timers are handled by Vitest.
+  for (const [id, clear] of activeTimers) clear(id)
+  activeTimers.clear()
+  vi.clearAllTimers()
+  vi.useRealTimers()
+  localStorageMock._data = {}
+  sessionStorageMock._data = {}
 })

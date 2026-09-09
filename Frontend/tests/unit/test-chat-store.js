@@ -8,10 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useChatStore } from '@/stores/chat'
 
-// Mock API calls
-vi.mock('@/api/rag', () => ({
-  askQuestion: vi.fn()
-}))
+import { controlledSSE, mockSSEAnswer, installSSEFetch, requestPayload } from '../helpers/sse'
 
 describe('聊天Store单元测试', () => {
   let chatStore
@@ -19,6 +16,7 @@ describe('聊天Store单元测试', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     chatStore = useChatStore()
+    installSSEFetch()
   })
 
   afterEach(() => {
@@ -27,7 +25,6 @@ describe('聊天Store单元测试', () => {
 
   describe('问答功能', () => {
     it('应该成功发送问题并接收回答', async () => {
-      const { askQuestion } = await import('@/api/rag')
       const mockResponse = {
         answer: '人工智能是计算机科学的一个分支...',
         sources: [
@@ -37,19 +34,23 @@ describe('聊天Store单元测试', () => {
         quality_score: 0.92
       }
       
-      askQuestion.mockResolvedValue(mockResponse)
+      mockSSEAnswer(mockResponse)
 
       const question = '什么是人工智能？'
       await chatStore.sendMessage(question)
 
+      expect(fetch).toHaveBeenCalledWith('/api/rag/ask', expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer c1-test-token' }
+      }))
       // 验证API调用参数
-      expect(askQuestion).toHaveBeenCalledWith(
+      expect(requestPayload()).toEqual(
         expect.objectContaining({
           query: question,
           top_k: 10,
           enable_rerank: true,
-          enable_web_fallback: false,
-          stream: false
+          enable_web_fallback: true,
+          stream: true
         })
       )
 
@@ -71,36 +72,58 @@ describe('聊天Store单元测试', () => {
     })
 
     it('应该处理问答失败', async () => {
-      const { askQuestion } = await import('@/api/rag')
       const mockError = new Error('RAG服务不可用')
-      askQuestion.mockRejectedValue(mockError)
+      fetch.mockRejectedValue(mockError)
 
       await expect(chatStore.sendMessage('测试问题')).rejects.toThrow('RAG服务不可用')
       
       // 验证加载状态已重置
       expect(chatStore.loading).toBe(false)
+      expect(chatStore.streaming).toBe(false)
       
       // 验证添加了错误消息
-      expect(chatStore.messages).toHaveLength(2) // 用户消息 + 错误消息
-      expect(chatStore.messages[1]).toMatchObject({
+      expect(chatStore.messages).toHaveLength(3) // 用户消息 + 流占位 + 传输错误消息
+      expect(chatStore.lastMessage).toMatchObject({
         type: 'ai',
         error: true
       })
     })
 
     it('应该更新加载状态', async () => {
-      const { askQuestion } = await import('@/api/rag')
-      askQuestion.mockImplementation(() => 
-        new Promise(resolve => 
-          setTimeout(() => resolve({ answer: '测试回答', sources: [] }), 100)
-        )
-      )
-
-      const sendPromise = chatStore.sendMessage('测试')
-      expect(chatStore.loading).toBe(true)
-
-      await sendPromise
+      const stream = controlledSSE()
+      fetch.mockResolvedValue(stream.response)
+      const sendPromise = chatStore.sendMessage('测试问题')
+      // Attach a consumer immediately, even if an intermediate assertion fails.
+      const outcome = sendPromise.then(value => ({ value }), error => ({ error }))
+      try {
+        expect(chatStore.loading).toBe(false)
+        expect(chatStore.streaming).toBe(true)
+        expect(chatStore.isChatting).toBe(true)
+        expect(chatStore.lastMessage.thinking).toBe(true)
+        stream.event({ type: 'thinking', stage: 'generation' })
+        await vi.waitFor(() => expect(chatStore.lastMessage.thinkingStage).toBe('generation'))
+        stream.write('data: {"type":"content","data":"第一')
+        await Promise.resolve()
+        expect(chatStore.lastMessage.content).toBe('')
+        stream.write('块"}\n\n')
+        await vi.waitFor(() => expect(chatStore.lastMessage.content).toBe('第一块'))
+        expect(chatStore.lastMessage.thinking).toBe(false)
+        expect(chatStore.lastMessage.isStreaming).toBe(true)
+        stream.event({ type: 'sources', data: { sources: [{ title: '来源' }], model: 'qwen3:8b' } })
+        stream.event({ type: 'content', data: '第二块' })
+        await vi.waitFor(() => expect(chatStore.lastMessage.sources).toEqual([{ title: '来源' }]))
+        stream.event({ type: 'done', stats: { response_time: 1.25 } })
+        await vi.waitFor(() => expect(chatStore.lastMessage.isStreaming).toBe(false))
+        expect(chatStore.lastMessage.content).toBe('第一块第二块')
+        expect(chatStore.lastMessage.responseTime).toBe(1250)
+      } finally {
+        stream.close()
+        await outcome
+      }
+      expect((await outcome).error).toBeUndefined()
       expect(chatStore.loading).toBe(false)
+      expect(chatStore.streaming).toBe(false)
+      expect(chatStore.isChatting).toBe(false)
     })
 
     it('应该处理空问题', async () => {

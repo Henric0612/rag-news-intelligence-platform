@@ -8,6 +8,7 @@ import pytest
 class TestSprint1AuthAPI:
     """Sprint 1：认证API测试（3个用例）"""
     
+    @pytest.mark.ci
     def test_register_success(self, client):
         """AUTH-API-001: POST /api/auth/register"""
         data = {
@@ -27,6 +28,7 @@ class TestSprint1AuthAPI:
         assert result['data']['user']['email'] == 'test@example.com'
         print("✓ 用户注册API测试通过")
     
+    @pytest.mark.ci
     def test_register_duplicate_email(self, client):
         """测试重复邮箱注册"""
         data = {
@@ -49,6 +51,7 @@ class TestSprint1AuthAPI:
         assert '邮箱已被注册' in result['message']
         print("✓ 重复邮箱注册正确拒绝")
     
+    @pytest.mark.ci
     def test_register_invalid_email(self, client):
         """测试无效邮箱格式"""
         data = {
@@ -63,6 +66,7 @@ class TestSprint1AuthAPI:
         assert result['success'] is False
         print("✓ 无效邮箱格式正确拒绝")
     
+    @pytest.mark.ci
     def test_register_weak_password(self, client):
         """测试弱密码"""
         data = {
@@ -77,6 +81,7 @@ class TestSprint1AuthAPI:
         assert result['success'] is False
         print("✓ 弱密码正确拒绝")
     
+    @pytest.mark.ci
     def test_login_success(self, client):
         """AUTH-API-002: POST /api/auth/login"""
         # 先注册用户
@@ -102,6 +107,7 @@ class TestSprint1AuthAPI:
         assert 'user' in result['data']
         print("✓ 用户登录API测试通过")
     
+    @pytest.mark.ci
     def test_login_with_email(self, client):
         """测试使用邮箱登录"""
         # 先注册用户
@@ -125,6 +131,7 @@ class TestSprint1AuthAPI:
         assert 'tokens' in result['data']
         print("✓ 邮箱登录测试通过")
     
+    @pytest.mark.ci
     def test_login_wrong_password(self, client):
         """测试错误密码登录"""
         # 先注册用户
@@ -147,6 +154,7 @@ class TestSprint1AuthAPI:
         assert result['success'] is False
         print("✓ 错误密码正确拒绝")
     
+    @pytest.mark.ci
     def test_login_nonexistent_user(self, client):
         """测试不存在的用户登录"""
         login_data = {
@@ -160,6 +168,7 @@ class TestSprint1AuthAPI:
         assert result['success'] is False
         print("✓ 不存在用户正确拒绝")
     
+    @pytest.mark.ci
     def test_refresh_token(self, client):
         """AUTH-API-003: POST /api/auth/refresh"""
         # 先注册并登录
@@ -187,6 +196,7 @@ class TestSprint1AuthAPI:
         assert 'access_token' in result['data']['tokens']
         print("✓ Token刷新API测试通过")
     
+    @pytest.mark.ci
     def test_refresh_token_invalid(self, client):
         """测试无效refresh token"""
         response = client.post('/api/auth/refresh',
@@ -197,6 +207,7 @@ class TestSprint1AuthAPI:
         assert result['success'] is False
         print("✓ 无效refresh token正确拒绝")
     
+    @pytest.mark.ci
     def test_get_user_info(self, client, auth_headers):
         """测试获取用户信息"""
         response = client.get('/api/auth/me', headers=auth_headers)
@@ -209,6 +220,7 @@ class TestSprint1AuthAPI:
         assert 'email' in result['data']['user']
         print("✓ 获取用户信息测试通过")
     
+    @pytest.mark.ci
     def test_get_user_info_unauthorized(self, client):
         """测试未授权获取用户信息"""
         response = client.get('/api/auth/me')

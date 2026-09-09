@@ -12,6 +12,7 @@ from Backend.utils.jwt_utils import create_access_token, create_refresh_token, v
 class TestSprint1AuthIntegration:
     """Sprint 1：认证集成测试（2个用例）"""
     
+    @pytest.mark.ci
     def test_complete_auth_flow(self, app):
         """AUTH-INT-001: 完整认证流程（注册→登录→访问→登出）"""
         with app.app_context():
@@ -41,6 +42,7 @@ class TestSprint1AuthIntegration:
             
             print("✓ 完整认证流程测试通过")
     
+    @pytest.mark.ci
     def test_token_refresh_mechanism(self, app):
         """AUTH-INT-002: Token刷新机制"""
         with app.app_context():

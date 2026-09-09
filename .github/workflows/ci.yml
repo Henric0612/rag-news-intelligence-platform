@@ -1,0 +1,179 @@
+name: Daily CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  backend-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SECRET_KEY: c2-ci-only-secret-key-for-contract-tests
+      JWT_SECRET_KEY: c2-ci-only-jwt-key-for-contract-tests
+      FLASK_ENV: testing
+      DATABASE_URL: 'sqlite:///:memory:'
+      HF_HUB_OFFLINE: '1'
+      TRANSFORMERS_OFFLINE: '1'
+      HF_DATASETS_OFFLINE: '1'
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      CUDA_VISIBLE_DEVICES: ''
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+          architecture: x64
+          cache: pip
+          cache-dependency-path: Backend/requirements.lock
+      - name: Record runtime and dependency inputs
+        run: |
+          python --version
+          python -m pip --version
+          uname -m
+          git rev-parse HEAD
+          sha256sum Backend/requirements.lock
+      - name: Set temporary backend paths
+        run: |
+          echo "RAG_DATA_DIR=$RUNNER_TEMP/backend-data" >> "$GITHUB_ENV"
+          echo "FAISS_INDEX_PATH=$RUNNER_TEMP/backend-data/faiss/knowledge.index" >> "$GITHUB_ENV"
+          echo "FAISS_ID_MAPPING_PATH=$RUNNER_TEMP/backend-data/faiss/id_mapping.json" >> "$GITHUB_ENV"
+      - name: Install locked dependencies
+        run: python -m pip install -r Backend/requirements.lock
+      - name: Check dependency consistency
+        run: python -m pip check
+      - name: Import backend dependencies without loading models
+        run: |
+          python - <<'PY'
+          import importlib
+          from importlib.metadata import version
+
+          for module, distribution in [
+              ('flask', 'flask'), ('flask_sqlalchemy', 'flask-sqlalchemy'),
+              ('flask_jwt_extended', 'flask-jwt-extended'), ('flask_cors', 'flask-cors'),
+              ('torch', 'torch'), ('faiss', 'faiss-cpu'),
+              ('sentence_transformers', 'sentence-transformers'),
+              ('langchain_huggingface', 'langchain-huggingface'),
+              ('langchain_ollama', 'langchain-ollama'),
+              ('trafilatura', 'trafilatura'), ('gunicorn', 'gunicorn'),
+          ]:
+              importlib.import_module(module)
+              print(f'{module}: {version(distribution)}')
+          import torch
+          assert torch.version.cuda is None, 'CI requires CPU-only Torch'
+          assert '+cpu' in torch.__version__, 'Expected locked CPU Torch wheel'
+          PY
+      - name: Run backend CI contracts and coverage
+        run: |
+          mkdir -p artifacts
+          python -m pytest -c Backend/pytest.ini Backend/tests -m ci \
+            --cov=Backend \
+            --cov-config=Backend/tests/.coveragerc \
+            --cov-report=term-missing \
+            --cov-report=xml:artifacts/backend-coverage.xml \
+            --junitxml=artifacts/backend-junit.xml
+      - name: Verify required backend reports
+        if: ${{ !cancelled() }}
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          for name, root_tag in [
+              ('backend-coverage.xml', 'coverage'),
+              ('backend-junit.xml', 'testsuites'),
+          ]:
+              path = Path('artifacts') / name
+              assert path.stat().st_size > 0, f'Empty report: {path}'
+              assert ET.parse(path).getroot().tag == root_tag, f'Invalid report: {path}'
+          PY
+      - name: Upload backend reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-reports
+          path: |
+            artifacts/backend-junit.xml
+            artifacts/backend-coverage.xml
+          if-no-files-found: error
+          retention-days: 14
+
+  frontend-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: Frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+      - name: Record runtime and dependency inputs
+        run: |
+          node --version
+          npm --version
+          uname -m
+          git rev-parse HEAD
+          sha256sum package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run authoritative frontend CI contract
+        run: npm run test:ci
+      - name: Build production frontend
+        run: npm run build
+      - name: Upload frontend reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-reports
+          path: |
+            Frontend/coverage/junit.xml
+            Frontend/coverage/lcov.info
+          if-no-files-found: error
+          retention-days: 14
+
+  frontend-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Record build inputs
+        run: |
+          docker version
+          git rev-parse HEAD
+          sha256sum Frontend/Dockerfile Frontend/package-lock.json
+      - name: Build full frontend image
+        run: docker build --progress=plain --tag rag-news-frontend:ci --file Frontend/Dockerfile Frontend
+      - name: Record output image
+        run: docker image inspect rag-news-frontend:ci --format '{{json .}}'
+
+  compose-config:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      SECRET_KEY: c2-compose-only-secret-key
+      JWT_SECRET_KEY: c2-compose-only-jwt-key
+      OLLAMA_HOST: http://127.0.0.1:11434
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate static Compose configuration
+        run: |
+          docker compose version
+          docker compose --env-file /dev/null --file compose.yaml config --quiet

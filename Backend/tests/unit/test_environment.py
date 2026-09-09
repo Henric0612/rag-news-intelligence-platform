@@ -11,11 +11,13 @@ from flask import Flask
 class TestSprint0Environment:
     """Sprint 0：环境验证测试（6个用例）"""
     
+    @pytest.mark.ci
     def test_python_version(self):
         """ENV-001: Python 3.11+环境验证"""
         assert sys.version_info >= (3, 11), "Python版本需要3.11+"
         print(f"✓ Python版本: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
     
+    @pytest.mark.ci
     def test_nodejs_environment(self):
         """ENV-002: Node.js 18+环境验证"""
         # 后端测试中，我们验证Node.js相关配置是否存在
@@ -25,6 +27,7 @@ class TestSprint0Environment:
         assert os.path.exists(package_json), "Frontend package.json应该存在"
         print("✓ Frontend环境配置存在")
     
+    @pytest.mark.ci
     def test_flask_initialization(self, app):
         """FRAME-001: Flask应用初始化"""
         assert isinstance(app, Flask)
@@ -33,6 +36,7 @@ class TestSprint0Environment:
         assert app.config['TESTING'] is True
         print("✓ Flask应用初始化成功")
     
+    @pytest.mark.ci
     def test_vue_framework_config(self):
         """FRAME-002: Vue3应用初始化验证"""
         # 验证Vue3项目配置文件存在
@@ -41,6 +45,7 @@ class TestSprint0Environment:
         assert os.path.exists(vite_config), "Vite配置文件应该存在"
         print("✓ Vue3项目配置存在")
     
+    @pytest.mark.ci
     def test_sqlite_connection(self, app):
         """DB-001: SQLite数据库连接"""
         from Backend.models import db
@@ -52,6 +57,7 @@ class TestSprint0Environment:
             assert result == 1
             print("✓ SQLite数据库连接成功")
     
+    @pytest.mark.ci
     def test_faiss_initialization(self, app):
         """DB-002: FAISS向量库初始化"""
         with app.app_context():

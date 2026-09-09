@@ -267,16 +267,21 @@ describe('认证Store单元测试', () => {
     })
 
     it('应该处理无效的认证状态', async () => {
-      const { getUserInfo } = await import('@/api/auth')
+      const { getUserInfo, refreshToken } = await import('@/api/auth')
+      refreshToken.mockRejectedValue(new Error('Refresh Token无效'))
       const mockError = new Error('Token无效')
       mockError.response = { status: 401 }
       getUserInfo.mockRejectedValue(mockError)
 
       authStore.token = 'invalid-token'
 
-      const result = await authStore.checkAuth()
+      authStore.user = { id: 1, username: 'stale-user' }
+      await expect(authStore.checkAuth()).rejects.toBe(mockError)
 
-      expect(result).toBe(false)
+      expect(refreshToken).toHaveBeenCalledOnce()
+      expect(getUserInfo).toHaveBeenCalledOnce()
+      expect(authStore.isLoggedIn).toBe(false)
+      expect(localStorage.removeItem).toHaveBeenCalledWith('token')
       expect(authStore.token).toBe('')
       expect(authStore.user).toBeNull()
     })

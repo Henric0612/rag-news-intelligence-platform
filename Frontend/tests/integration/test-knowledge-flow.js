@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useKnowledgeStore } from '@/stores/knowledge'
+import { getKnowledgeStats } from '@/api/knowledge'
 
 // Mock API
 vi.mock('@/api/knowledge', () => ({
@@ -15,7 +16,8 @@ vi.mock('@/api/knowledge', () => ({
   createKnowledge: vi.fn(),
   updateKnowledge: vi.fn(),
   deleteKnowledge: vi.fn(),
-  batchDeleteKnowledge: vi.fn()
+  batchDeleteKnowledge: vi.fn(),
+  getKnowledgeStats: vi.fn()
 }))
 
 // Mock Element Plus
@@ -35,6 +37,7 @@ describe('知识库管理流程集成测试', () => {
     pinia = createPinia()
     setActivePinia(pinia)
     knowledgeStore = useKnowledgeStore()
+    getKnowledgeStats.mockResolvedValue({ total: 1, vectorized: 1, not_vectorized: 0 })
   })
 
   afterEach(() => {
@@ -112,6 +115,8 @@ describe('知识库管理流程集成测试', () => {
 
       // 创建知识库条目
       await knowledgeStore.createKnowledgeItem(newItem)
+      expect(getKnowledgeStats).toHaveBeenCalledOnce()
+      expect(knowledgeStore.stats).toEqual({ total: 1, vectorized: 1, not_vectorized: 0 })
 
       // 验证API被调用
       expect(createKnowledge).toHaveBeenCalledWith(newItem)
@@ -176,6 +181,8 @@ describe('知识库管理流程集成测试', () => {
 
       // 删除知识库条目
       await knowledgeStore.deleteKnowledgeItem(1)
+      expect(getKnowledgeStats).toHaveBeenCalledOnce()
+      expect(knowledgeStore.stats).toEqual({ total: 1, vectorized: 1, not_vectorized: 0 })
 
       // 验证API被调用
       expect(deleteKnowledge).toHaveBeenCalledWith(1)
@@ -204,6 +211,8 @@ describe('知识库管理流程集成测试', () => {
 
       // 批量删除
       await knowledgeStore.batchDeleteKnowledgeItems([1, 2])
+      expect(getKnowledgeStats).toHaveBeenCalledOnce()
+      expect(knowledgeStore.stats).toEqual({ total: 1, vectorized: 1, not_vectorized: 0 })
 
       // 验证API被调用
       expect(batchDeleteKnowledge).toHaveBeenCalledWith([1, 2])

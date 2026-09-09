@@ -11,6 +11,7 @@ from Backend.models import db
 class TestSprint1AuthService:
     """Sprint 1：认证服务测试（4个核心用例）"""
     
+    @pytest.mark.ci
     def test_register_user_success(self, app):
         """AUTH-001: 用户注册（有效数据）"""
         with app.app_context():
@@ -28,6 +29,7 @@ class TestSprint1AuthService:
             assert user.password_hash != 'TestPass123!'
             print("✓ 用户注册成功")
     
+    @pytest.mark.ci
     def test_authenticate_user_success(self, app):
         """AUTH-002: 用户登录（正确凭据）"""
         with app.app_context():
@@ -49,6 +51,7 @@ class TestSprint1AuthService:
             assert user.email == 'test@example.com'
             print("✓ 用户登录成功")
     
+    @pytest.mark.ci
     def test_jwt_token_generation(self, app):
         """AUTH-003: JWT Token生成验证"""
         with app.app_context():
@@ -70,6 +73,7 @@ class TestSprint1AuthService:
             assert isinstance(refresh_token, str)
             print("✓ JWT Token生成成功")
     
+    @pytest.mark.ci
     def test_password_encryption(self, app):
         """AUTH-004: 密码加密验证"""
         with app.app_context():

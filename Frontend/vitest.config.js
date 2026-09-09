@@ -2,14 +2,18 @@ import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [vue()],
   test: {
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./tests/setup.js'],
-    include: ['tests/**/*.js'],
+    include: mode === 'ci'
+      ? ['tests/{unit,integration}/**/test-*.js']
+      : ['tests/{unit,integration,security,performance}/**/test-*.js'],
     exclude: [
+      'tests/e2e/**',
+      'tests/helpers/**',
       'tests/setup.js',
       'tests/**/__init__.js',
       'tests/run-all-tests.js',
@@ -17,7 +21,19 @@ export default defineConfig({
     ],
     testTimeout: 30000, // 增加测试超时时间到30秒
     // 使用默认reporter，避免重复输出
-    reporters: ['default'],
+    reporters: mode === 'ci' ? ['default', 'junit'] : ['default'],
+    outputFile: { junit: './coverage/junit.xml' },
+    dangerouslyIgnoreUnhandledErrors: false,
+    coverage: {
+      provider: 'v8',
+      all: true,
+      include: ['src/**'],
+      exclude: [],
+      clean: true,
+      reportsDirectory: './coverage',
+      reporter: ['text', 'lcov'],
+      reportOnFailure: true
+    },
     // 失败时显示完整的diff
     outputDiffLines: 20,
     // 静默模式配置
@@ -38,4 +54,4 @@ export default defineConfig({
       '@': resolve(__dirname, 'src')
     }
   }
-})
+}))

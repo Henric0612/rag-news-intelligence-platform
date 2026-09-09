@@ -8,10 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useChatStore } from '@/stores/chat'
 
-// Mock API
-vi.mock('@/api/rag', () => ({
-  askQuestion: vi.fn()
-}))
+import { controlledSSE, mockSSEAnswer, installSSEFetch, requestPayload } from '../helpers/sse'
 
 describe('问答流程集成测试', () => {
   let pinia
@@ -21,6 +18,7 @@ describe('问答流程集成测试', () => {
     pinia = createPinia()
     setActivePinia(pinia)
     chatStore = useChatStore()
+    installSSEFetch()
   })
 
   afterEach(() => {
@@ -29,7 +27,6 @@ describe('问答流程集成测试', () => {
 
   describe('完整问答流程', () => {
     it('应该完成从提问到回答的完整流程', async () => {
-      const { askQuestion } = await import('@/api/rag')
       const mockResponse = {
         answer: '人工智能是计算机科学的一个分支，致力于创建能够执行通常需要人类智能的任务的系统。',
         sources: [
@@ -38,13 +35,13 @@ describe('问答流程集成测试', () => {
         ],
         response_time: 2500
       }
-      askQuestion.mockResolvedValue(mockResponse)
+      mockSSEAnswer(mockResponse)
 
       // 发送问题
       await chatStore.sendMessage('什么是人工智能？')
 
       // 验证API被调用（包含配置参数）
-      expect(askQuestion).toHaveBeenCalledWith(
+      expect(requestPayload()).toEqual(
         expect.objectContaining({
           query: '什么是人工智能？'
         })
@@ -60,8 +57,7 @@ describe('问答流程集成测试', () => {
     })
 
     it('应该处理连续对话', async () => {
-      const { askQuestion } = await import('@/api/rag')
-      askQuestion.mockResolvedValue({
+      mockSSEAnswer({
         answer: '回答内容',
         sources: [],
         response_time: 1000
@@ -76,17 +72,16 @@ describe('问答流程集成测试', () => {
       expect(chatStore.messages.length).toBe(6) // 3个用户消息 + 3个AI回答
       expect(chatStore.userMessageCount).toBe(3)
       expect(chatStore.aiMessageCount).toBe(3)
-      expect(askQuestion).toHaveBeenCalledTimes(3)
+      expect(fetch).toHaveBeenCalledTimes(3)
     })
 
     it('应该正确保存检索来源', async () => {
-      const { askQuestion } = await import('@/api/rag')
       const mockSources = [
         { title: '文档1', content: '内容1', score: 0.95 },
         { title: '文档2', content: '内容2', score: 0.85 },
         { title: '文档3', content: '内容3', score: 0.75 }
       ]
-      askQuestion.mockResolvedValue({
+      mockSSEAnswer({
         answer: 'AI回答',
         sources: mockSources,
         response_time: 2000
@@ -103,8 +98,7 @@ describe('问答流程集成测试', () => {
 
   describe('问答错误处理', () => {
     it('应该处理API错误', async () => {
-      const { askQuestion } = await import('@/api/rag')
-      askQuestion.mockRejectedValue(new Error('网络错误'))
+      fetch.mockRejectedValue(new Error('网络错误'))
 
       // 发送问题并期望抛出错误
       await expect(chatStore.sendMessage('测试问题')).rejects.toThrow()
@@ -119,57 +113,72 @@ describe('问答流程集成测试', () => {
       await expect(chatStore.sendMessage('   ')).rejects.toThrow('消息内容不能为空')
     })
 
-    it('应该处理无效响应', async () => {
-      const { askQuestion } = await import('@/api/rag')
-      askQuestion.mockResolvedValue(null)
+    it('应该消费 SSE error 事件并结束消息状态', async () => {
+      const stream = controlledSSE()
+      stream.event({ type: 'error', code: 'AI_DEPENDENCY_UNAVAILABLE', message: 'AI服务暂时不可用' })
+      stream.close()
+      fetch.mockResolvedValue(stream.response)
 
-      // 发送问题
-      await expect(chatStore.sendMessage('测试')).rejects.toThrow('AI响应格式错误')
+      const message = await chatStore.sendMessage('测试')
+      expect(message).toMatchObject({ type: 'ai', error: true, content: 'AI服务暂时不可用', thinking: false, isStreaming: false })
+      expect(chatStore.messages).toHaveLength(2)
+      expect(chatStore.streaming).toBe(false)
+      expect(chatStore.loading).toBe(false)
     })
   })
 
   describe('聊天状态管理', () => {
     it('应该正确管理加载状态', async () => {
-      const { askQuestion } = await import('@/api/rag')
-      askQuestion.mockImplementation(() => 
-        new Promise(resolve => setTimeout(() => resolve({
-          answer: '回答',
-          sources: [],
-          response_time: 1000
-        }), 100))
-      )
-
-      // 开始发送消息
+      const stream = controlledSSE()
+      fetch.mockResolvedValue(stream.response)
       const sendPromise = chatStore.sendMessage('测试问题')
-
-      // 验证加载状态
-      expect(chatStore.loading).toBe(true)
-
-      // 等待完成
-      await sendPromise
-
-      // 验证加载完成
+      // Attach a consumer immediately, even if an intermediate assertion fails.
+      const outcome = sendPromise.then(value => ({ value }), error => ({ error }))
+      try {
+        expect(chatStore.loading).toBe(false)
+        expect(chatStore.streaming).toBe(true)
+        expect(chatStore.isChatting).toBe(true)
+        expect(chatStore.lastMessage.thinking).toBe(true)
+        stream.event({ type: 'thinking', stage: 'generation' })
+        await vi.waitFor(() => expect(chatStore.lastMessage.thinkingStage).toBe('generation'))
+        stream.write('data: {"type":"content","data":"第一')
+        await Promise.resolve()
+        expect(chatStore.lastMessage.content).toBe('')
+        stream.write('块"}\n\n')
+        await vi.waitFor(() => expect(chatStore.lastMessage.content).toBe('第一块'))
+        expect(chatStore.lastMessage.thinking).toBe(false)
+        expect(chatStore.lastMessage.isStreaming).toBe(true)
+        stream.event({ type: 'sources', data: { sources: [{ title: '来源' }], model: 'qwen3:8b' } })
+        stream.event({ type: 'content', data: '第二块' })
+        await vi.waitFor(() => expect(chatStore.lastMessage.sources).toEqual([{ title: '来源' }]))
+        stream.event({ type: 'done', stats: { response_time: 1.25 } })
+        await vi.waitFor(() => expect(chatStore.lastMessage.isStreaming).toBe(false))
+        expect(chatStore.lastMessage.content).toBe('第一块第二块')
+        expect(chatStore.lastMessage.responseTime).toBe(1250)
+      } finally {
+        stream.close()
+        await outcome
+      }
+      expect((await outcome).error).toBeUndefined()
       expect(chatStore.loading).toBe(false)
+      expect(chatStore.streaming).toBe(false)
+      expect(chatStore.isChatting).toBe(false)
     })
 
     it('应该在错误时重置加载状态', async () => {
-      const { askQuestion } = await import('@/api/rag')
-      askQuestion.mockRejectedValue(new Error('错误'))
+      fetch.mockRejectedValue(new Error('错误'))
 
       // 发送消息
-      try {
-        await chatStore.sendMessage('测试')
-      } catch (e) {
-        // 忽略错误
-      }
+      await expect(chatStore.sendMessage('测试')).rejects.toThrow('错误')
+      expect(chatStore.streaming).toBe(false)
+      expect(chatStore.lastMessage.error).toBe(true)
 
       // 验证加载状态被重置
       expect(chatStore.loading).toBe(false)
     })
 
     it('应该支持清空聊天', async () => {
-      const { askQuestion } = await import('@/api/rag')
-      askQuestion.mockResolvedValue({
+      mockSSEAnswer({
         answer: '回答',
         sources: [],
         response_time: 1000
@@ -191,8 +200,7 @@ describe('问答流程集成测试', () => {
 
   describe('消息管理', () => {
     it('应该能够删除单条消息', async () => {
-      const { askQuestion } = await import('@/api/rag')
-      askQuestion.mockResolvedValue({
+      mockSSEAnswer({
         answer: '回答',
         sources: [],
         response_time: 1000
@@ -209,8 +217,7 @@ describe('问答流程集成测试', () => {
     })
 
     it('应该正确统计消息数量', async () => {
-      const { askQuestion } = await import('@/api/rag')
-      askQuestion.mockResolvedValue({
+      mockSSEAnswer({
         answer: '回答',
         sources: [],
         response_time: 1000
@@ -226,8 +233,7 @@ describe('问答流程集成测试', () => {
     })
 
     it('应该能够获取最后一条消息', async () => {
-      const { askQuestion } = await import('@/api/rag')
-      askQuestion.mockResolvedValue({
+      mockSSEAnswer({
         answer: '最新回答',
         sources: [],
         response_time: 1000
@@ -257,8 +263,7 @@ describe('问答流程集成测试', () => {
     })
 
     it('应该使用更新后的配置发送消息', async () => {
-      const { askQuestion } = await import('@/api/rag')
-      askQuestion.mockResolvedValue({
+      mockSSEAnswer({
         answer: '回答',
         sources: [],
         response_time: 1000
@@ -271,7 +276,7 @@ describe('问答流程集成测试', () => {
       await chatStore.sendMessage('测试')
 
       // 验证API调用包含新配置
-      expect(askQuestion).toHaveBeenCalledWith(
+      expect(requestPayload()).toEqual(
         expect.objectContaining({ top_k: 5 })
       )
     })
@@ -279,8 +284,7 @@ describe('问答流程集成测试', () => {
 
   describe('聊天历史导出', () => {
     it('应该能够导出聊天历史', async () => {
-      const { askQuestion } = await import('@/api/rag')
-      askQuestion.mockResolvedValue({
+      mockSSEAnswer({
         answer: '回答',
         sources: [],
         response_time: 1000

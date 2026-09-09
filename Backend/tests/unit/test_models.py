@@ -13,6 +13,7 @@ from Backend.models.search_history import SearchHistory
 class TestSprint1Models:
     """Sprint 1：数据模型测试（3个用例）"""
     
+    @pytest.mark.ci
     def test_user_model_crud(self, app):
         """MODEL-001: User模型CRUD"""
         with app.app_context():
@@ -45,6 +46,7 @@ class TestSprint1Models:
             
             print("✓ User模型CRUD测试通过")
     
+    @pytest.mark.ci
     def test_knowledge_item_model_crud(self, app):
         """MODEL-002: KnowledgeItem模型CRUD"""
         with app.app_context():
@@ -80,6 +82,7 @@ class TestSprint1Models:
             
             print("✓ KnowledgeItem模型CRUD测试通过")
     
+    @pytest.mark.ci
     def test_search_history_model_crud(self, app):
         """MODEL-003: SearchHistory模型CRUD"""
         with app.app_context():

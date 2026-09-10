@@ -1,0 +1,82 @@
+name: Backend Image Validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  backend-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      BASE_IMAGE: python:3.13-slim
+      OUTPUT_IMAGE: rag-news-backend:c3
+      EVIDENCE_DIR: artifacts/backend-image
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Record runner resources and build inputs
+        run: |
+          mkdir -p "$EVIDENCE_DIR"
+          docker version
+          docker info
+          df -h
+          {
+            echo "GitHub source SHA: $GITHUB_SHA"
+            echo "Git source SHA: $(git rev-parse HEAD)"
+            sha256sum Backend/Dockerfile Backend/requirements.lock
+            echo "Embedding model: sentence-transformers/all-MiniLM-L6-v2"
+            echo "Embedding revision: 1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
+            echo "Reranker model: cross-encoder/ms-marco-MiniLM-L-6-v2"
+            echo "Reranker revision: 233902d25c440f23af6f7d6e94d2946bac0bee0a"
+          } | tee "$EVIDENCE_DIR/build-inputs.txt"
+
+      - name: Resolve current base image
+        run: |
+          docker pull --platform linux/amd64 "$BASE_IMAGE"
+          {
+            echo "Image tag: $BASE_IMAGE"
+            docker image inspect "$BASE_IMAGE" \
+              --format 'Resolved repo digests: {{json .RepoDigests}}'
+            docker image inspect "$BASE_IMAGE" \
+              --format 'Platform: {{.Os}}/{{.Architecture}}'
+            docker image inspect "$BASE_IMAGE" \
+              --format 'Image ID: {{.Id}}'
+          } | tee "$EVIDENCE_DIR/base-image-digests.txt"
+
+      - name: Build full backend image without layer cache
+        run: |
+          docker build \
+            --pull \
+            --no-cache \
+            --progress=plain \
+            --tag "$OUTPUT_IMAGE" \
+            --file Backend/Dockerfile \
+            Backend
+
+      - name: Record output image metadata
+        run: |
+          docker image inspect "$OUTPUT_IMAGE" \
+            > "$EVIDENCE_DIR/backend-image-inspect.json"
+          docker image inspect "$OUTPUT_IMAGE" \
+            --format 'Image ID: {{.Id}} | RepoTags: {{json .RepoTags}} | RepoDigests: {{json .RepoDigests}} | OS: {{.Os}} | Architecture: {{.Architecture}} | Created: {{.Created}} | Image size (bytes): {{.Size}}' \
+            | tee "$EVIDENCE_DIR/backend-image-metadata.txt"
+
+      - name: Record post-build disk usage
+        if: ${{ !cancelled() }}
+        run: df -h
+
+      - name: Upload backend image build evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-image-evidence-${{ github.sha }}
+          path: artifacts/backend-image/
+          if-no-files-found: error
+          retention-days: 14

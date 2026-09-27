@@ -136,6 +136,8 @@ jobs:
         run: npm ci
       - name: Run authoritative frontend CI contract
         run: npm run test:ci
+      - name: C4 validation-only failure probe
+        run: exit 1
       - name: Build production frontend
         run: npm run build
       - name: Upload frontend reports

@@ -302,8 +302,24 @@ curl 'http://127.0.0.1:5000/api/ready?quick=false'
 
 当前仓库包含 36 个后端测试模块：13 个 unit、5 个 integration、8 个 API、6 个 E2E 和 4 个 performance 模块。这是按版本化测试文件统计的 module inventory，不代表当前 pytest collected case 数或通过数。
 
+GitHub CI 使用 Ubuntu 24.04、Python 3.13 和仓库根目录的 `Backend/requirements.lock` 安装固定版本依赖；`requirements.txt` 是依赖声明。CI 从仓库根目录执行：
+
 ```bash
-# 运行所有测试
+python -m pytest -c Backend/pytest.ini Backend/tests -m ci \
+  --cov=Backend --cov-config=Backend/tests/.coveragerc \
+  --cov-report=term-missing \
+  --cov-report=xml:artifacts/backend-coverage.xml \
+  --junitxml=artifacts/backend-junit.xml
+```
+
+`ci` marker 选定经过批准的确定性契约测试。CI 要求 coverage XML 与 JUnit XML 有效，但覆盖率百分比仅供参考，没有百分比阻断阈值。必需检查使用临时 SQLite 和模拟的 AI 依赖，不需要真实 Ollama、GPU、模型缓存或用户数据库。
+
+完整 Backend image 由独立的手动 GitHub Actions workflow 按需构建，不在每个 PR 上运行。真实 embedding、FAISS 检索、reranking、`qwen3:8b` 生成以及 native/Compose 运行仍需本地 WSL/Ollama 验证。详细边界见 [Phase C CI 说明](../Docs/Phase-C-CI.md)。
+
+下面的 `run_tests.py` 命令是本地测试辅助入口，可能包含需要额外环境的套件；其结果不能等同于上述 required CI 子集。
+
+```bash
+# 本地辅助入口（在 Backend/ 执行）
 python run_tests.py
 
 # 按类型运行

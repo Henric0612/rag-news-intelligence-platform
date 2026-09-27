@@ -78,8 +78,9 @@ Frontend/
 │   │   └── NotFound.vue   # 404 页面
 │   ├── App.vue            # 根组件
 │   └── main.js            # 入口文件
-├── tests/                 # 测试文件（16个）
-│   ├── unit/              # 单元测试（7个）
+├── tests/                 # 测试文件（17个）
+│   ├── unit/              # 单元测试（8个）
+│   │   ├── test-api-paths.js         # API 路径回归
 │   │   ├── test-environment.js        # 环境验证
 │   │   ├── test-vue-framework.js      # Vue框架测试
 │   │   ├── test-router-config.js      # 路由配置测试
@@ -175,66 +176,23 @@ docker compose up -d --build --wait
 
 ## Testing
 
-### 运行所有测试
+在 `Frontend/` 中先执行 `npm ci`。GitHub CI 的唯一权威测试入口是：
 
 ```bash
-# 运行所有Vitest测试（单元+集成+性能+安全）
-npm run test:all
-
-# 或使用测试运行器
-node run_tests.js
+npm run test:ci
 ```
 
-### 运行特定测试
+该命令运行 `tests/unit/` 与 `tests/integration/` 下的全部目标 Vitest 测试，要求零未处理错误或 Promise rejection，并生成、检查非空的 `coverage/junit.xml` 与 `coverage/lcov.info`，同时输出终端覆盖率摘要。报告生成是门禁；覆盖率百分比仅供参考，没有 80% 阻断阈值。
 
 ```bash
-# 单元测试（7个）
 npm run test:unit:all
-
-# 集成测试（6个）
 npm run test:integration:all
-
-# E2E测试（1个，需要Playwright）
-npm run test:e2e          # 运行所有E2E测试
-npm run test:e2e:ui       # UI模式（推荐）
-npm run test:e2e:headed   # 有头模式
-npm run test:e2e:report   # 查看报告
-
-# 性能测试（1个）
-npm run test:performance:all
-
-# 安全测试（1个）
-npm run test:security:all
-
-# 测试覆盖率
-npm run test:coverage
-
-# 监听模式
-npm run test:watch
+npm run build
 ```
 
-### E2E测试说明
+Daily CI 还执行生产构建和完整 Frontend Docker image 构建。Security 与 performance 目录、`npm run test:all` 及 `node run_tests.js` 不属于 required CI contract，不能据此声称这些套件在 CI 全绿。
 
-E2E测试使用 **Playwright** 进行真实浏览器测试，需要：
-
-1. **安装Playwright**: `npm install -D @playwright/test && npx playwright install`
-2. **启动后端**: 在仓库根目录运行 `python -m Backend` (http://localhost:5000)
-3. **启动前端**: `cd Frontend && npm run dev` (http://localhost:3000)
-4. **运行测试**: `npm run test:e2e`
-
-详细说明请参考 [tests/README.md](./tests/README.md)
-
-### 测试覆盖率
-
-- **目标覆盖率**: 80%+
-- **版本化测试模块数**: 16个（module inventory，不代表当前 collected/passing case 数）
-  - 单元测试: 7个（Store、基础设施）
-  - 集成测试: 6个（认证、搜索、问答、知识库、爬虫、分析）
-  - E2E测试: 1个（完整用户流程，Playwright）
-  - 性能测试: 1个（搜索、问答、页面加载）
-  - 安全测试: 1个（XSS、CSRF、JWT）
-- **覆盖范围**: Sprint 0-4 所有测试类型
-- **报告位置**: `Frontend/coverage/index.html`
+仓库保留一份 Playwright Browser E2E 规格，但依赖、服务准备与可靠性尚未纳入当前 CI；它是 deferred local asset。详见 [测试边界](tests/README.md)和 [Phase C CI 说明](../Docs/Phase-C-CI.md)。
 
 ## 设计系统
 

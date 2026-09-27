@@ -14,6 +14,8 @@ The portfolio focus is the end-to-end engineering workflow: ingestion, persisten
 
 The project evolved from an academic full-stack RAG application into a more reproducible and verifiable local AI engineering system. Phase B added explicit container boundaries, persistent state, dependency-failure semantics, and complementary native-development and container-validation workflows—it is more than a demo placed inside Docker.
 
+Current stage: **Phase B complete; Phase C complete; Phase D planned and not started.**
+
 ## Problem
 
 News research often spans disconnected sources and relies on exact-keyword search. That makes it difficult to organize material locally, retrieve conceptually related items, and trace an answer back to supporting records.
@@ -104,18 +106,18 @@ The current query path embeds the question, retrieves candidate IDs from an `Ind
 
 ## Testing & Validation
 
-The repository contains **52 categorized test modules** rather than relying on a single happy-path demo:
+The repository contains **53 categorized test modules** rather than relying on a single happy-path demo:
 
 | Area | Unit | Integration | API | E2E | Performance | Security | Total |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Backend | 13 | 5 | 8 | 6 | 4 | 0 | 36 |
-| Frontend | 7 | 6 | 0 | 1 | 1 | 1 | 16 |
+| Frontend | 8 | 6 | 0 | 1 | 1 | 1 | 17 |
 
-Backend pytest configuration includes an 80% coverage failure threshold. Frontend tooling can generate a Vitest coverage report, and the repository includes a Playwright end-to-end specification; Playwright must currently be installed separately before that specification can run.
+Daily GitHub Actions CI requires deterministic Backend tests marked `ci` and the Frontend Unit + Integration contract (`npm run test:ci`). Both produce coverage reports; report generation is required, while coverage percentages are informational. CI also builds the production frontend and its Docker image, and validates Compose configuration. A separate manual workflow validates the full Backend image.
 
-These are repository-level test assets and configuration evidence, not a claim that every suite currently passes in CI. The automated tests primarily validate software behavior. Retrieval relevance, answer groundedness, and end-to-end RAG quality are not yet covered by a dedicated evaluation framework.
+The table counts repository test assets, not suites required to pass in CI. Other Backend suites and Frontend security/performance tests are local-only assets; Browser E2E remains deferred. GitHub CI uses mocked AI dependencies and temporary SQLite, while real models, FAISS retrieval, reranking, Ollama/GPU, and RAG behavior require local WSL/Compose validation. Retrieval relevance, answer grounding, and end-to-end RAG quality are not yet covered by a dedicated evaluation framework.
 
-Current counts describe versioned test modules, not collected or passing test cases. Commands, prerequisites, and suite-specific caveats are maintained in the [Backend implementation reference](Backend/README.md#testing) and [Frontend implementation reference](Frontend/README.md#testing).
+Current counts describe versioned test modules, not collected or passing test cases. Commands, prerequisites, and evidence boundaries are maintained in the [Phase C CI guide](Docs/Phase-C-CI.md), [Backend implementation reference](Backend/README.md#testing), and [Frontend implementation reference](Frontend/README.md#testing).
 
 ## Current Engineering Evidence
 
@@ -202,7 +204,7 @@ The human engineering contribution focused on problem definition, system archite
 
 - SQLite and a local FAISS index target single-machine development rather than distributed production use.
 - Redis, Celery, and APScheduler are not established as active runtime dependencies in the current application wiring.
-- There is no repository-level CI/CD pipeline or automated quality gate execution.
+- GitHub CI validates software contracts and builds, while real Ollama/GPU behavior remains a local validation responsibility.
 - RAG evaluation is limited to software-behavior tests and a simple heuristic response score; there is no dedicated retrieval or groundedness benchmark.
 - Observability is limited to application logging and health/readiness endpoints.
 - Docker Desktop, WSL Integration, Host Ollama availability, and the local `qwen3:8b` model are operational prerequisites for the container workflow.
@@ -217,21 +219,21 @@ The human engineering contribution focused on problem definition, system archite
 
 ### Phase C — CI-Tested AI Application
 
-- Add GitHub Actions for backend and frontend tests.
-- Add repeatable builds, coverage reporting, and quality gates.
+- **Complete:** daily GitHub Actions contracts, coverage reporting, frontend production/image builds, Compose static validation, on-demand Backend image validation, and a protected `main` PR gate.
+- Merges to `main` require a PR and the four strict checks `backend-contracts`, `frontend-contracts`, `frontend-image`, and `compose-config`; no additional reviewer approval is required.
 
-### Phase D — Evaluated and Observable RAG System
+### Phase D — Evaluated and Observable RAG System (Next; not started)
 
 - Add lightweight retrieval and reranking evaluation.
 - Measure answer grounding and end-to-end latency.
 - Introduce structured metrics, tracing, and operational dashboards.
 
-### Later — AI Platform Evolution
+### Later — AI Platform Evolution (Deferred)
 
 - Evaluate Kubernetes only after container and CI foundations are stable.
 - Explore production-oriented model and LLM serving, scaling, and deeper observability.
 
-Phase B describes current capability. Phase C, Phase D, and later items remain planned evolution.
+Phase B and Phase C describe completed engineering stages. Phase D and later items are future work.
 
 ## Academic Context
 

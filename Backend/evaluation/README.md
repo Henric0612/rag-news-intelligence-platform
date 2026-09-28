@@ -33,6 +33,28 @@ passes integer record IDs, so convert JSON relevance keys with `int(key)`.
 Primary future cutoffs are Recall@20 and nDCG@5, with MRR@5 for reranking.
 These D1 functions do not run retrieval or report model quality.
 
+## D2 retrieval and reranking baseline
+
+From the repository root in the WSL native environment, with the existing
+local embedding and CrossEncoder model caches available, run:
+
+```bash
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/python -m Backend.evaluation.retrieval --output /tmp/rag-d2-retrieval-baseline.json
+```
+
+The runner loads the fixed D1 records into temporary SQLite and FAISS storage,
+indexes each manual record's `content` through the production embedding path, and calls
+the production semantic search and reranking methods for every question. The
+report has aggregate means plus one row per question with every candidate's
+ID, label, retrieval rank/score, and reranked rank/actual CrossEncoder score.
+It compares top-5 metrics on the same top-20 candidate set. No-answer questions
+are excluded only from Recall@20; their nDCG@5 and MRR@5 still describe the
+grade-1 contextual labels. `missing_relevant_ids` and `missing_evidence_ids`
+separate partial relevant-item recall from failure to retrieve direct evidence.
+The JSON file is a local run artifact; do not add it to Git or use its AI scores
+as a CI quality gate. Run `pytest -c Backend/pytest.ini Backend/tests -m ci` for
+the deterministic contract tests.
+
 `isolated_evaluation()` creates a private temporary SQLite database and an
 empty 384-dimensional FAISS IndexFlatIP plus `{}` ID mapping. It loads all
 fixed records into the `KnowledgeItem` table, yields an app context and paths,

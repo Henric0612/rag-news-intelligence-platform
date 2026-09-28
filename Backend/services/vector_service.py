@@ -392,7 +392,7 @@ class VectorService:
             # 执行搜索
             scores, vector_indices = self.faiss_index.search(
                 query_vector.reshape(1, -1).astype('float32'), 
-                min(top_k, len(self.id_mapping))
+                min(top_k, self.faiss_index.ntotal)
             )
             
             # 转换为知识库ID。新增向量时键是 int，从 JSON 重载后键是 str。

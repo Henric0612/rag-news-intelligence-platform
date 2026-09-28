@@ -113,6 +113,8 @@ class SearchService:
             results: List[Dict[str, Any]] = []
             search_type = 'semantic'
             response_time = 0.0
+            missing_mapping_ranks = []
+            missing_record_ranks = []
             
             if vectors_available:
                 # 生成查询向量
@@ -125,8 +127,14 @@ class SearchService:
                 documents = self._get_documents_by_ids(knowledge_ids, filters)
                 
                 # 构建结果
-                for i, (doc, score) in enumerate(zip(documents, scores)):
-                    if doc:  # 确保文档存在
+                documents_by_id = {doc.id: doc for doc in documents}
+                for i, (knowledge_id, score) in enumerate(zip(knowledge_ids, scores)):
+                    doc = documents_by_id.get(knowledge_id)
+                    if knowledge_id == -1:
+                        missing_mapping_ranks.append(i + 1)
+                    elif doc is None:
+                        missing_record_ranks.append(i + 1)
+                    else:
                         results.append({
                             'id': doc.id,
                             'title': doc.title,
@@ -165,7 +173,9 @@ class SearchService:
                 'results': results,
                 'total': len(results),
                 'response_time': response_time,
-                'search_type': search_type
+                'search_type': search_type,
+                'missing_mapping_ranks': missing_mapping_ranks,
+                'missing_record_ranks': missing_record_ranks,
             }
             
         except Exception as e:
@@ -214,21 +224,25 @@ class SearchService:
                 }
                 documents.append(Document(page_content=content, metadata=metadata))
             
-            # 使用 LangChain CrossEncoderReranker 进行重排
-            # 更新 top_n 参数
-            self.rerank_model.top_n = top_k
-            reranked_docs = self.rerank_model.compress_documents(documents, query)
+            # CrossEncoderReranker.compress_documents discards its real scores.
+            # Score the same pairs directly so each result keeps its actual score.
+            scores = self.rerank_model.model.score(
+                [(query, doc.page_content) for doc in documents]
+            )
+            if len(scores) != len(documents):
+                raise ValueError('reranker returned a different score count')
+            ranked = sorted(zip(documents, scores), key=lambda pair: pair[1], reverse=True)
             
             # 将 LangChain Document 转换回字典格式
             reranked_results = []
-            for i, doc in enumerate(reranked_docs):
+            for i, (doc, score) in enumerate(ranked[:top_k]):
                 # 从原始results中找到对应的完整信息
                 doc_id = doc.metadata.get('id')
                 original_result = next((r for r in results if r.get('id') == doc_id), None)
                 
                 if original_result:
                     result_dict = original_result.copy()
-                    result_dict['rerank_score'] = doc.metadata.get('relevance_score', 1.0 - i * 0.1)
+                    result_dict['rerank_score'] = float(score)
                     result_dict['rank'] = i + 1
                     reranked_results.append(result_dict)
             

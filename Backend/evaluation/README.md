@@ -86,3 +86,62 @@ fact is also present. Record disagreements for later adjudication.
 
 **A source list is not sentence-level citation correctness.** This rubric
 reviews support using spans; D1 does not claim citation correctness validation.
+
+## D3 answer and grounding baseline
+
+Run on the WSL host with Ollama `qwen3:8b`, the existing model caches, and GPU
+available. The output path must be outside the repository and must not exist.
+For a reviewable authoritative run, choose a persistent external directory
+accessible to the reviewer; `/tmp` may be cleared between Codex sessions.
+Example for an initial local run:
+
+```bash
+mkdir -p "$HOME/rag-evaluation-output"
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/python -m Backend.evaluation.answer_run --output "$HOME/rag-evaluation-output/rag-d3-answer-baseline.json"
+.venv/bin/python -m Backend.evaluation.answer_report "$HOME/rag-evaluation-output/rag-d3-answer-baseline.json"
+```
+
+The runner writes the fixed repeatability selection before generating answers,
+then checkpoints each first answer. It calls the production `RAGService.answer_question`
+with real isolated D1 records, embeddings, FAISS, CrossEncoder and Ollama. It
+does not change the production prompt, context, model or generation parameters.
+If interrupted, retain the partial JSON as evidence; start a new run under a
+new filename rather than replacing any first answer. The six selected questions
+each receive two additional calls after all 30 first calls. The report tool
+validates completeness and writes a scored derivative, a JSON review queue,
+a three-answer comparison, and a readable human-review Markdown file. It never
+rewrites the original first-run answers or retrieval traces.
+
+Rule output records literal fact, number/date anchor, evidence visibility and
+refusal phrase cues. These are diagnostic cues, not factual correctness or
+grounding grades. Every D1 rubric axis remains pending until a human reviews
+the answer against quoted evidence spans, including any unsupported additional
+claim. `retrieval_limited` means a required span was not visible in the actual
+context; `generation_limited_candidate` and `correct_refusal_candidate` need
+human confirmation. All other semantic cases are marked ambiguous. The source
+list is not sentence-level citation mapping. Repeated answers describe variation
+only and are not a new baseline or statistically significant sample.
+
+### Accepted D3 baseline provenance
+
+The accepted authoritative rerun is `d3-22a9fa43-08d1-48eb-b07e-5ab8fef974c5`;
+its raw JSON SHA-256 is
+`917365cddfa783b02e31a8c369f3c06b5eb80c62a1d1e3b4d7516dc6d06d2eb0`.
+The original 2026-09-28 baseline artifacts were lost from `/tmp`. The full D3
+protocol was rerun, and Human Review accepted this new run as the replacement
+authoritative baseline, not as a recovery of the original. The recorded verdicts
+are `D3_HUMAN_REVIEW = PASS` and `D3_STATUS = PASS`.
+
+Accepted findings: 30 questions (28 answerable, 2 unanswerable); five cases
+limited by retrieval, context, or truncation. Q015 missed the top-20 candidate
+set; Q023 hit the first-500-character truncation boundary; Q027 gave a partial
+answer because of evidence/context limits. Q028 and Q029 correctly refused to
+answer. The six preselected repeatability cases kept their core factual or
+refusal outcomes. A deferred grounding limitation remains: when evidence is
+absent from the current context, some answers overstate that absence as missing
+from the entire knowledge base.
+
+Raw and generated runtime artifacts are intentionally not versioned. The fixed
+D1 dataset and this repository's D3 runner permit a fresh execution of the
+same protocol; a fresh run receives a new ID and is not the accepted raw run.
+Full evaluation documentation is deferred to D5.

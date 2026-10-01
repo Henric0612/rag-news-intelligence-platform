@@ -42,8 +42,8 @@
 │   ├── text_utils.py
 │   ├── response.py
 │   └── decorators.py
-├── tests/              # 36 个 pytest 测试模块
-│   ├── unit/           # 13 个模块
+├── tests/              # 40 个 pytest 测试模块
+│   ├── unit/           # 17 个模块
 │   ├── integration/    # 5 个模块
 │   ├── api/            # 8 个模块
 │   ├── e2e/            # 6 个模块
@@ -298,9 +298,22 @@ curl 'http://127.0.0.1:5000/api/ready?quick=false'
   - 用户名: `testuser`
   - 密码: `test123`
 
+## Phase D：评估与运行观测
+
+固定原创 synthetic corpus 含 24 条记录、30 道题；真实检索/重排、答案/grounding/拒答与小样本延迟 baseline 已经 review。CI 只验证确定性软件契约，真实 AI 数值保持 informational，不是质量门槛或 SLO。方法、精确结果、replacement baseline provenance、硬件、限制及复现见 [Phase D Evaluation](../Docs/Phase-D-Evaluation.md)，runner/rubric 见 [evaluation/README.md](evaluation/README.md)。
+
+普通和 SSE `/api/rag/ask` 使用 `X-Request-ID` 关联结构化事件；记录候选数、重排状态、阶段耗时和错误/回退类别。未执行阶段为 null；SSE TTFT 指请求至应用首个非空 content event。
+
+```http
+GET /api/rag/metrics
+Authorization: Bearer {admin_access_token}
+```
+
+未登录返回 401、普通用户 403、admin 200。响应包含进程/实例与启动/重置元数据、请求计数和阶段分布。指标仅在 single-worker 进程内保存，最多保留每阶段最近 2048 个 non-null 样本；重启清零，SQLite/FAISS 持久化不受影响。权限复用现有粗粒度 admin role；不包含 query/context/prompt/answer/认证全文，不提供 exporter 或 dashboard。
+
 ## Testing
 
-当前仓库包含 36 个后端测试模块：13 个 unit、5 个 integration、8 个 API、6 个 E2E 和 4 个 performance 模块。这是按版本化测试文件统计的 module inventory，不代表当前 pytest collected case 数或通过数。
+当前仓库包含 40 个后端测试模块：17 个 unit、5 个 integration、8 个 API、6 个 E2E 和 4 个 performance 模块。这是按版本化测试文件统计的 module inventory，不代表当前 pytest collected case 数或通过数。
 
 GitHub CI 使用 Ubuntu 24.04、Python 3.13 和仓库根目录的 `Backend/requirements.lock` 安装固定版本依赖；`requirements.txt` 是依赖声明。CI 从仓库根目录执行：
 

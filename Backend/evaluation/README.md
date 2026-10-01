@@ -1,4 +1,4 @@
-# Phase D / D1 evaluation foundation
+# Phase D evaluation runners
 
 `golden_v1.json` is a fixed, original, fictional Chinese news corpus. IDs are
 stable `KnowledgeItem.id` integers. Content and questions were written for this
@@ -30,7 +30,7 @@ Relevance grades:
 `mrr_at_k` uses the first grade 1 or 2. All metric functions reject duplicate
 retrieved IDs and nonpositive K; fewer than K results are accepted. The caller
 passes integer record IDs, so convert JSON relevance keys with `int(key)`.
-Primary future cutoffs are Recall@20 and nDCG@5, with MRR@5 for reranking.
+The D2 cutoffs are Recall@20 and nDCG@5, with MRR@5 for reranking.
 These D1 functions do not run retrieval or report model quality.
 
 ## D2 retrieval and reranking baseline
@@ -144,4 +144,23 @@ from the entire knowledge base.
 Raw and generated runtime artifacts are intentionally not versioned. The fixed
 D1 dataset and this repository's D3 runner permit a fresh execution of the
 same protocol; a fresh run receives a new ID and is not the accepted raw run.
-Full evaluation documentation is deferred to D5.
+Final methodology, accepted D2/D3/D4 evidence, runtime boundaries, reproduction and the final-SHA acceptance checklist are maintained in [Docs/Phase-D-Evaluation.md](../../Docs/Phase-D-Evaluation.md).
+
+## D4 latency and observability runner
+
+From the repository root, choose a new output outside the repository:
+
+```bash
+D4_OUTPUT=$(mktemp -d)
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/python -m Backend.evaluation.latency --output "$D4_OUTPUT/latency.json" --repetitions 2
+```
+
+The runner uses production Flask RAG routes on isolated D1 storage with real
+embedding/FAISS/CrossEncoder/host Ollama. Q001/Q025 each repeat twice per mode
+(normal n=4, streaming n=4); service-cold and streaming warmup observations
+are separate. Metadata-only reports include correlation, stage timings,
+access [401,403,200], interruption/fallback probes and privacy checks. TTFT
+means first non-empty application content, not an internal model token.
+These finite local observations are not a load benchmark or SLO. The accepted
+D4 baseline and hardware are recorded in the final guide; a fresh run does not
+replace that baseline.

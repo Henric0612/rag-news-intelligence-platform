@@ -20,6 +20,8 @@ from .search_service import get_search_service
 from .llm_service import get_llm_service
 from Backend.utils.response import success_response, error_response
 
+from .rag_observability import observe_normal, observe_stream, timed, stage, note
+
 logger = logging.getLogger(__name__)
 
 
@@ -71,8 +73,9 @@ class RAGService:
             logger.info("LangChain RAG提示词模板初始化成功")
             
         except Exception as e:
-            logger.error(f"LangChain RAG Chain初始化失败: {str(e)}")
+            logger.error(f"LangChain RAG Chain初始化失败: {type(e).__name__}")
     
+    @observe_normal
     def answer_question(self, query: str, user_id: Optional[int] = None, options: Optional[Dict] = None) -> Dict[str, Any]:
         """完整RAG流程问答 (使用LangChain LCEL)"""
         try:
@@ -84,20 +87,23 @@ class RAGService:
             enable_web_fallback = options.get('enable_web_fallback', self.enable_web_fallback) if options else self.enable_web_fallback
             
             # 1. 向量检索
-            logger.info(f"开始LangChain RAG流程，查询: {query}")
+            logger.info("开始LangChain RAG流程")
             search_results = self.search_service.semantic_search(query, top_k, None, user_id)
             
             no_knowledge = False
             web_search_used = False  # ✅ 添加独立标志追踪是否使用了联网搜索
             
             if 'results' not in search_results or not search_results['results']:
-                logger.warning(f"本地搜索无结果: {query}")
+                logger.warning("本地搜索无结果")
                 no_knowledge = True
                 # 尝试联网搜索
                 logger.info(f"enable_web_fallback 状态: {enable_web_fallback}")
                 if enable_web_fallback:
-                    logger.info(f"触发联网搜索，查询: {query}")
-                    web_results = self.search_service.web_fallback_search(query)
+                    logger.info("触发联网搜索")
+                    note('fallback', 'web_search')
+                    with stage('candidate_retrieval'):
+                        web_results = self.search_service.web_fallback_search(query)
+                    note('candidates', len(web_results.get('results', [])))
                     logger.info(f"联网搜索返回结果数: {len(web_results.get('results', []))}")
                     if web_results.get('results'):
                         search_results = web_results
@@ -110,6 +116,8 @@ class RAGService:
                     logger.warning("联网搜索未启用 (enable_web_fallback=False)")
             
             # 2. 结果重排（可选，使用LangChain CrossEncoderReranker）
+            if not enable_rerank:
+                note('rerank', 'skipped_disabled')
             if enable_rerank:
                 logger.info("执行LangChain结果重排")
                 reranked_results = self.search_service.rerank_results(
@@ -125,46 +133,50 @@ class RAGService:
             # 4. 使用 LangChain LCEL 构建 RAG Chain 并生成答案
             logger.info("使用LangChain LCEL生成答案")
             
-            if self.llm_service.llm and context:
-                # 构建上下文字符串
-                context_str = "\n\n".join([
-                    f"文档{i+1}：{doc.get('title', '')}\n{doc.get('content', '')}"
-                    for i, doc in enumerate(context[:5])
-                ])
+            with stage('generation'):
+                if self.llm_service.llm and context:
+                    # 构建上下文字符串
+                    context_str = "\n\n".join([
+                        f"文档{i+1}：{doc.get('title', '')}\n{doc.get('content', '')}"
+                        for i, doc in enumerate(context[:5])
+                    ])
                 
-                # 使用 LangChain LCEL 构建 RAG Chain
-                rag_chain = (
-                    {"context": lambda x: context_str, "question": RunnablePassthrough()}
-                    | self.prompt_template
-                    | self.llm_service.llm
-                    | StrOutputParser()
-                )
+                    # 使用 LangChain LCEL 构建 RAG Chain
+                    rag_chain = (
+                        {"context": lambda x: context_str, "question": RunnablePassthrough()}
+                        | self.prompt_template
+                        | self.llm_service.llm
+                        | StrOutputParser()
+                    )
                 
-                # 调用 Chain 生成答案
-                try:
-                    answer = rag_chain.invoke(query)
-                except Exception as e:
-                    logger.error(f"AI依赖调用失败: {str(e)}")
+                    # 调用 Chain 生成答案
+                    try:
+                        answer = rag_chain.invoke(query)
+                    except Exception as e:
+                        note('error', 'generation_failure')
+                        logger.error(f"AI依赖调用失败: {type(e).__name__}")
+                        return self._create_error_response(
+                            query, 'AI_DEPENDENCY_UNAVAILABLE'
+                        )
+
+                    llm_response = {
+                        'answer': answer,
+                        'formatted_response': answer,
+                        'quality_score': self._evaluate_answer_quality(answer, query, context),
+                        'response_time': time.time() - start_time,
+                        'model': self.llm_service.model_name,
+                        'tokens_used': len(answer.split())
+                    }
+                else:
+                    # 降级到原有方式
+                    note('fallback', 'legacy_generation')
+                    llm_response = self.llm_service.generate_answer(query, context, options)
+
+                if llm_response.get('error'):
+                    note('error', 'generation_failure')
                     return self._create_error_response(
                         query, 'AI_DEPENDENCY_UNAVAILABLE'
                     )
-                
-                llm_response = {
-                    'answer': answer,
-                    'formatted_response': answer,
-                    'quality_score': self._evaluate_answer_quality(answer, query, context),
-                    'response_time': time.time() - start_time,
-                    'model': self.llm_service.model_name,
-                    'tokens_used': len(answer.split())
-                }
-            else:
-                # 降级到原有方式
-                llm_response = self.llm_service.generate_answer(query, context, options)
-
-            if llm_response.get('error'):
-                return self._create_error_response(
-                    query, 'AI_DEPENDENCY_UNAVAILABLE'
-                )
             
             # 5. 响应验证
             validated_response = self.validate_response(llm_response, query, context)
@@ -191,7 +203,7 @@ class RAGService:
             return final_response
             
         except Exception as e:
-            logger.error(f"LangChain RAG流程失败: {str(e)}")
+            logger.error(f"LangChain RAG流程失败: {type(e).__name__}")
             return {
                 'error': str(e),
                 'error_code': 'RAG_REQUEST_FAILED',
@@ -240,6 +252,7 @@ class RAGService:
         except Exception:
             return 0.5
     
+    @observe_stream
     def stream_answer(self, query: str, user_id: Optional[int] = None, options: Optional[Dict] = None) -> Generator[Dict[str, Any], None, None]:
         """流式RAG问答（带思考过程可视化）"""
         try:
@@ -251,7 +264,7 @@ class RAGService:
             enable_web_fallback = options.get('enable_web_fallback', self.enable_web_fallback) if options else self.enable_web_fallback
             
             # ✅ 阶段1: 发送检索阶段状态
-            logger.info(f"流式RAG开始 - 检索阶段: query={query[:50]}")
+            logger.info("流式RAG开始 - 检索阶段")
             yield {'type': 'thinking', 'stage': 'retrieval', 'message': '正在搜索知识库...'}
             
             # 执行向量检索
@@ -262,14 +275,17 @@ class RAGService:
             web_search_used = False
             
             if 'results' not in search_results or not search_results['results']:
-                logger.warning(f"本地搜索无结果: {query}")
+                logger.warning("本地搜索无结果")
                 no_knowledge = True
                 
                 if enable_web_fallback:
-                    logger.info(f"触发联网搜索（流式）: {query}")
+                    logger.info("触发联网搜索（流式）")
                     yield {'type': 'thinking', 'stage': 'web_search', 'message': '正在联网搜索...'}
                     
-                    web_results = self.search_service.web_fallback_search(query)
+                    note('fallback', 'web_search')
+                    with stage('candidate_retrieval'):
+                        web_results = self.search_service.web_fallback_search(query)
+                    note('candidates', len(web_results.get('results', [])))
                     if web_results.get('results'):
                         search_results = web_results
                         no_knowledge = False
@@ -283,6 +299,8 @@ class RAGService:
                     return
             
             # ✅ 阶段2: 发送重排阶段状态
+            if not enable_rerank:
+                note('rerank', 'skipped_disabled')
             if enable_rerank:
                 logger.info(f"流式RAG - 重排阶段")
                 yield {'type': 'thinking', 'stage': 'rerank', 'message': '正在优化搜索结果...'}
@@ -311,17 +329,26 @@ class RAGService:
             yield {'type': 'sources', 'data': sources_data}
             
             # ✅ 流式输出答案内容
-            try:
-                for chunk in self.llm_service.stream_response(query, context, options):
-                    yield {'type': 'content', 'data': chunk}
-            except Exception as e:
-                logger.error(f"AI依赖流式调用失败: {str(e)}")
-                yield {
-                    'type': 'error',
-                    'code': 'AI_DEPENDENCY_UNAVAILABLE',
-                    'message': 'AI服务暂时不可用，请稍后重试。'
-                }
-                return
+            with stage('generation'):
+                content_stream = None
+                try:
+                    content_stream = self.llm_service.stream_response(query, context, options)
+                    for chunk in content_stream:
+                        yield {'type': 'content', 'data': chunk}
+                except Exception as e:
+                    note('error', 'generation_failure')
+                    logger.error(f"AI依赖流式调用失败: {type(e).__name__}")
+                    yield {
+                        'type': 'error',
+                        'code': 'AI_DEPENDENCY_UNAVAILABLE',
+                        'message': 'AI服务暂时不可用，请稍后重试。'
+                    }
+                    return
+                finally:
+                    if content_stream is not None:
+                        close = getattr(content_stream, 'close', None)
+                        if close is not None:
+                            close()
             
             # ✅ 发送完成信息（带统计数据）
             total_time = time.time() - start_time
@@ -338,11 +365,10 @@ class RAGService:
             logger.info(f"流式RAG完成，总耗时: {total_time:.2f}秒")
             
         except Exception as e:
-            logger.error(f"流式RAG失败: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"流式RAG失败: {type(e).__name__}")
             yield {'type': 'error', 'message': str(e)}
     
+    @timed('context_construction')
     def build_context(self, documents: List[Dict]) -> List[Dict]:
         """构建上下文"""
         try:
@@ -384,7 +410,8 @@ class RAGService:
             return context
             
         except Exception as e:
-            logger.error(f"构建上下文失败: {str(e)}")
+            note('error', 'context_failure')
+            logger.error(f"构建上下文失败: {type(e).__name__}")
             return []
     
     def integrate_vector_search(self, query: str, top_k: int = 20, user_id: Optional[int] = None) -> List[Dict]:
@@ -394,7 +421,7 @@ class RAGService:
             return search_results.get('results', [])
             
         except Exception as e:
-            logger.error(f"向量检索集成失败: {str(e)}")
+            logger.error(f"向量检索集成失败: {type(e).__name__}")
             return []
     
     def integrate_llm_generation(self, query: str, context: List[Dict], options: Optional[Dict] = None) -> Dict[str, Any]:
@@ -404,7 +431,7 @@ class RAGService:
             return llm_response
             
         except Exception as e:
-            logger.error(f"LLM生成集成失败: {str(e)}")
+            logger.error(f"LLM生成集成失败: {type(e).__name__}")
             return {
                 'answer': '抱歉，生成答案时发生错误。',
                 'formatted_response': {'answer': '抱歉，生成答案时发生错误。'},
@@ -439,7 +466,7 @@ class RAGService:
             }
             
         except Exception as e:
-            logger.error(f"响应验证失败: {str(e)}")
+            logger.error(f"响应验证失败: {type(e).__name__}")
             return {
                 'answer': '抱歉，响应验证时发生错误。',
                 'formatted_response': {'answer': '抱歉，响应验证时发生错误。'},
@@ -493,7 +520,7 @@ class RAGService:
             }
             
         except Exception as e:
-            logger.error(f"获取RAG统计信息失败: {str(e)}")
+            logger.error(f"获取RAG统计信息失败: {type(e).__name__}")
             return {'error': str(e)}
     
     def health_check(self, deep_check: bool = False) -> Dict[str, Any]:
@@ -552,7 +579,7 @@ class RAGService:
             return status
             
         except Exception as e:
-            logger.error(f"RAG服务健康检查失败: {str(e)}")
+            logger.error(f"RAG服务健康检查失败: {type(e).__name__}")
             return {'error': str(e)}
 
 

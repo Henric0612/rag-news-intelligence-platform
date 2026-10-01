@@ -10,7 +10,8 @@ import logging
 
 from Backend.services.rag_service import get_rag_service
 from Backend.utils.response import success_response, error_response
-from Backend.utils.decorators import jwt_required, validate_json
+from Backend.utils.decorators import jwt_required, validate_json, admin_required
+from Backend.services.rag_observability import RequestTrace, get_metrics, stage
 
 logger = logging.getLogger(__name__)
 
@@ -49,80 +50,101 @@ class RAGQuerySchema(Schema):
 @validate_json(RAGQuerySchema)
 def ask_question():
     """RAG问答接口"""
+    trace = None
+    streaming_response = False
     try:
-        import time
-        request_start_time = time.time()
-        
         data = request.get_json()
-        logger.info(f"收到RAG问答请求: query={data.get('query', '')[:50]}...")
-        logger.info(f"完整请求数据: {data}")
         query = data['query']
         top_k = data.get('top_k', 20)
         enable_rerank = data.get('enable_rerank', True)
         enable_web_fallback = data.get('enable_web_fallback', False)
         stream = data.get('stream', False)
         options = data.get('options', {})
-        
-        logger.info(f"RAG请求参数: top_k={top_k}, enable_rerank={enable_rerank}, enable_web_fallback={enable_web_fallback}, stream={stream}")
-        
-        # 获取用户ID
         user_id = getattr(request, 'current_user_id', None)
-        
-        # 构建选项
         rag_options = {
             'top_k': top_k,
             'enable_rerank': enable_rerank,
             'enable_web_fallback': enable_web_fallback,
             **options
         }
-        
-        # 获取RAG服务
-        rag_service = get_rag_service()
-        
+        trace = RequestTrace('streaming' if stream else 'normal',
+                             request.headers.get('X-Request-ID'))
+        with trace.bind():
+            with stage('service_initialization'):
+                rag_service = get_rag_service()
+
         if stream:
-            # 流式响应
-            from flask import current_app, copy_current_request_context
-            
-            # 保存当前应用的引用
+            from flask import current_app
             app = current_app._get_current_object()
-            
+
             def generate():
+                iterator = None
                 try:
-                    # 在生成器中确保有应用上下文
                     with app.app_context():
-                        for chunk in rag_service.stream_answer(query, user_id, rag_options):
+                        iterator = rag_service.stream_answer(query, user_id, rag_options)
+                        while True:
+                            with trace.bind():
+                                try:
+                                    chunk = next(iterator)
+                                except StopIteration:
+                                    break
                             yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                except GeneratorExit:
+                    raise
                 except Exception as e:
-                    logger.error(f"流式响应生成错误: {str(e)}")
-                    import traceback
-                    traceback.print_exc()
+                    trace.fail('application_error')
+                    logger.error("流式响应生成错误: %s", type(e).__name__)
                     error_chunk = {'type': 'error', 'message': f'应用错误: {str(e)}'}
                     yield f"data: {json.dumps(error_chunk, ensure_ascii=False)}\n\n"
-            
-            return Response(
+                finally:
+                    try:
+                        if iterator is not None:
+                            with app.app_context(), trace.bind():
+                                iterator.close()
+                    finally:
+                        trace.finish()
+
+            response = Response(
                 generate(),
                 mimetype='text/plain',
                 headers={
                     'Cache-Control': 'no-cache',
                     'Connection': 'keep-alive',
-                    'Access-Control-Allow-Origin': '*'
+                    'Access-Control-Allow-Origin': '*',
+                    'X-Request-ID': trace.request_id,
                 }
             )
+            # Also covers a response closed before its iterator is first advanced.
+            response.call_on_close(trace.finish)
+            streaming_response = True
+            return response
         else:
-            # 普通响应
-            logger.info("开始执行RAG问答流程")
-            result = rag_service.answer_question(query, user_id, rag_options)
-            
-            request_time = time.time() - request_start_time
-            logger.info(f"RAG请求完成，总耗时: {request_time:.2f}秒")
-            
-            return _rag_result_response(result)
-        
+            with trace.bind():
+                result = rag_service.answer_question(query, user_id, rag_options)
+            if result.get('error'):
+                trace.fail('generation_failure' if result.get('error_code') ==
+                           'AI_DEPENDENCY_UNAVAILABLE' else 'application_error')
+            response, status = _rag_result_response(result)
+            response.headers['X-Request-ID'] = trace.request_id
+            return response, status
     except Exception as e:
-        logger.error(f"RAG问答失败: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return error_response(f"RAG问答失败: {str(e)}", 500)
+        if trace:
+            trace.fail('application_error')
+        logger.error("RAG问答失败: %s", type(e).__name__)
+        response, status = error_response(f"RAG问答失败: {str(e)}", 500)
+        if trace:
+            response.headers['X-Request-ID'] = trace.request_id
+        return response, status
+    finally:
+        if trace and not streaming_response:
+            trace.finish()
+
+
+@rag_bp.route('/metrics', methods=['GET'])
+@admin_required()
+def get_rag_metrics():
+    """Single-worker process-local counters; restart clears all samples."""
+    return success_response(get_metrics().snapshot())
 
 
 @rag_bp.route('/context', methods=['POST'])
@@ -150,7 +172,7 @@ def build_context():
         })
         
     except Exception as e:
-        logger.error(f"构建上下文失败: {str(e)}")
+        logger.error(f"构建上下文失败: {type(e).__name__}")
         return error_response(f"构建上下文失败: {str(e)}", 500)
 
 
@@ -175,7 +197,7 @@ def vector_search():
         return success_response(results)
         
     except Exception as e:
-        logger.error(f"向量检索失败: {str(e)}")
+        logger.error(f"向量检索失败: {type(e).__name__}")
         return error_response(f"向量检索失败: {str(e)}", 500)
 
 
@@ -201,7 +223,7 @@ def generate_answer():
         return _rag_result_response(result)
         
     except Exception as e:
-        logger.error(f"LLM生成失败: {str(e)}")
+        logger.error(f"LLM生成失败: {type(e).__name__}")
         return error_response(f"LLM生成失败: {str(e)}", 500)
 
 
@@ -227,7 +249,7 @@ def validate_response():
         return success_response(validated_response)
         
     except Exception as e:
-        logger.error(f"响应验证失败: {str(e)}")
+        logger.error(f"响应验证失败: {type(e).__name__}")
         return error_response(f"响应验证失败: {str(e)}", 500)
 
 
@@ -245,7 +267,7 @@ def get_rag_stats():
         return success_response(stats)
         
     except Exception as e:
-        logger.error(f"获取RAG统计失败: {str(e)}")
+        logger.error(f"获取RAG统计失败: {type(e).__name__}")
         return error_response(f"获取RAG统计失败: {str(e)}", 500)
 
 
@@ -284,7 +306,7 @@ def rag_health_check():
         return success_response(health_status)
         
     except Exception as e:
-        logger.error(f"RAG服务健康检查失败: {str(e)}")
+        logger.error(f"RAG服务健康检查失败: {type(e).__name__}")
         return error_response(f"RAG服务健康检查失败: {str(e)}", 500)
 
 
@@ -309,5 +331,5 @@ def test_rag_pipeline():
         })
         
     except Exception as e:
-        logger.error(f"RAG流程测试失败: {str(e)}")
+        logger.error(f"RAG流程测试失败: {type(e).__name__}")
         return error_response(f"RAG流程测试失败: {str(e)}", 500)

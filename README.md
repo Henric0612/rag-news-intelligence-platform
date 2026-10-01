@@ -14,7 +14,7 @@ The portfolio focus is the end-to-end engineering workflow: ingestion, persisten
 
 The project evolved from an academic full-stack RAG application into a more reproducible and verifiable local AI engineering system. Phase B added explicit container boundaries, persistent state, dependency-failure semantics, and complementary native-development and container-validation workflows—it is more than a demo placed inside Docker.
 
-Current stage: **Phase B complete; Phase C complete; Phase D planned and not started.**
+Current stage: **Phase B complete; Phase C complete; Phase D evaluation and observability implemented and accepted through D4.** Final documentation and exact-SHA closeout requirements are recorded in the [Phase D guide](Docs/Phase-D-Evaluation.md).
 
 ## Problem
 
@@ -79,7 +79,7 @@ The current query path embeds the question, retrieves candidate IDs from an `Ind
 | Keyword degradation path | Keyword retrieval keeps search behavior available when embeddings or the vector index are unavailable. This improves resilience while making the returned search type explicit. |
 | Separate client, routes, and services | Vue, Flask blueprints, and backend service modules keep presentation, HTTP handling, and application logic distinct enough to test and evolve independently. |
 | Two local workflows | Native WSL is the fast development path; Docker Desktop with WSL Integration and Compose is the reproducible container validation path. Ollama stays on the host so local GPU inference is not duplicated inside Compose. |
-| Layered validation | Unit, integration, API, end-to-end, performance, and frontend security test modules exercise software behavior at different boundaries. Dedicated RAG quality evaluation remains future work. |
+| Layered validation | Unit, integration, API, end-to-end, performance, and frontend security test modules exercise software behavior at different boundaries. Phase D adds a fixed synthetic evaluation dataset, manual answer review, and request/stage observability; real AI measurements remain informational. |
 
 ## Key Capabilities
 
@@ -106,16 +106,16 @@ The current query path embeds the question, retrieves candidate IDs from an `Ind
 
 ## Testing & Validation
 
-The repository contains **53 categorized test modules** rather than relying on a single happy-path demo:
+The repository contains **57 categorized test modules** rather than relying on a single happy-path demo:
 
 | Area | Unit | Integration | API | E2E | Performance | Security | Total |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Backend | 13 | 5 | 8 | 6 | 4 | 0 | 36 |
+| Backend | 17 | 5 | 8 | 6 | 4 | 0 | 40 |
 | Frontend | 8 | 6 | 0 | 1 | 1 | 1 | 17 |
 
 Daily GitHub Actions CI requires deterministic Backend tests marked `ci` and the Frontend Unit + Integration contract (`npm run test:ci`). Both produce coverage reports; report generation is required, while coverage percentages are informational. CI also builds the production frontend and its Docker image, and validates Compose configuration. A separate manual workflow validates the full Backend image.
 
-The table counts repository test assets, not suites required to pass in CI. Other Backend suites and Frontend security/performance tests are local-only assets; Browser E2E remains deferred. GitHub CI uses mocked AI dependencies and temporary SQLite, while real models, FAISS retrieval, reranking, Ollama/GPU, and RAG behavior require local WSL/Compose validation. Retrieval relevance, answer grounding, and end-to-end RAG quality are not yet covered by a dedicated evaluation framework.
+The table counts repository test assets, not suites required to pass in CI. Other Backend suites and Frontend security/performance tests are local-only assets; Browser E2E remains deferred. GitHub CI uses mocked AI dependencies and temporary SQLite, while real models, FAISS retrieval, reranking, Ollama/GPU, and RAG behavior require local WSL/Compose validation. Phase D evaluates retrieval/reranking and answer grounding on 24 fixed fictional records and 30 questions, using deterministic checks plus Human Review. This reproducible corpus does not represent production news quality.
 
 Current counts describe versioned test modules, not collected or passing test cases. Commands, prerequisites, and evidence boundaries are maintained in the [Phase C CI guide](Docs/Phase-C-CI.md), [Backend implementation reference](Backend/README.md#testing), and [Frontend implementation reference](Frontend/README.md#testing).
 
@@ -128,7 +128,7 @@ Current counts describe versioned test modules, not collected or passing test ca
 - The Vue client contains dedicated API modules, Pinia stores, routed views, and test suites for the principal application flows.
 - The Compose workflow serves the Vue production build through Caddy, runs the backend through single-worker Gunicorn, and persists SQLite, FAISS, ID mapping, and uploads in one named volume.
 
-No latency, throughput, retrieval-quality, or answer-quality benchmark is claimed in this phase.
+Accepted Phase D evidence includes Recall@20 of 0.9464, same-candidate nDCG@5 of 0.7845 → 0.7684 after reranking, and a reviewed answer/refusal baseline. Reranking did not improve the aggregate baseline. Four warm observations per mode yielded normal total p50/p95 of 6136.77/10487.93 ms and streaming application TTFT p50/p95 of 5838.51/9529.38 ms on an RTX 4060 Laptop GPU. These are informational local observations, not SLOs or throughput claims. Exact values, provenance, failures and reproduction are in the [Phase D guide](Docs/Phase-D-Evaluation.md).
 
 ## Quick Start: Containerized Local Workflow
 
@@ -205,8 +205,8 @@ The human engineering contribution focused on problem definition, system archite
 - SQLite and a local FAISS index target single-machine development rather than distributed production use.
 - Redis, Celery, and APScheduler are not established as active runtime dependencies in the current application wiring.
 - GitHub CI validates software contracts and builds, while real Ollama/GPU behavior remains a local validation responsibility.
-- RAG evaluation is limited to software-behavior tests and a simple heuristic response score; there is no dedicated retrieval or groundedness benchmark.
-- Observability is limited to application logging and health/readiness endpoints.
+- Phase D evaluation uses a fixed synthetic corpus and rule diagnostics plus Human Review. It does not establish real-news production quality or sentence-level citation correctness; the runtime heuristic response score remains separate from evaluation ground truth.
+- Observability includes correlated metadata events, stage timing and admin-only process-local metrics. Restart clears metrics; historical collection, exporters and dashboards remain deferred.
 - Docker Desktop, WSL Integration, Host Ollama availability, and the local `qwen3:8b` model are operational prerequisites for the container workflow.
 - Secrets management, TLS, deployment hardening, and production data migration are not implemented.
 
@@ -222,18 +222,19 @@ The human engineering contribution focused on problem definition, system archite
 - **Complete:** daily GitHub Actions contracts, coverage reporting, frontend production/image builds, Compose static validation, on-demand Backend image validation, and a protected `main` PR gate.
 - Merges to `main` require a PR and the four strict checks `backend-contracts`, `frontend-contracts`, `frontend-image`, and `compose-config`; no additional reviewer approval is required.
 
-### Phase D — Evaluated and Observable RAG System (Next; not started)
+### Phase D — Evaluated and Observable RAG System
 
-- Add lightweight retrieval and reranking evaluation.
-- Measure answer grounding and end-to-end latency.
-- Introduce structured metrics, tracing, and operational dashboards.
+- **Implemented and accepted through D4:** versioned synthetic evaluation, retrieval/reranking comparison, human answer/grounding/refusal review, repeatability observations, stage timing and request correlation.
+- Normal and streaming RAG expose metadata events and an admin-only process-local `/api/rag/metrics` endpoint; restart clears metrics.
+- Final acceptance requires local/isolated Compose checks, clean repository state, and Daily CI plus Backend Image Validation on the exact final main SHA. See the [Phase D guide](Docs/Phase-D-Evaluation.md).
+- Independent real-news validation, chunking/retrieval improvements and exporters/collectors/dashboards remain deferred.
 
 ### Later — AI Platform Evolution (Deferred)
 
 - Evaluate Kubernetes only after container and CI foundations are stable.
 - Explore production-oriented model and LLM serving, scaling, and deeper observability.
 
-Phase B and Phase C describe completed engineering stages. Phase D and later items are future work.
+Phase D records measured capabilities and limitations of the existing pipeline. Later items remain future work.
 
 ## Academic Context
 

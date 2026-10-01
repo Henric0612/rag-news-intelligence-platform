@@ -69,7 +69,7 @@ class LLMService:
             
         except Exception as e:
             init_time = time.time() - init_start
-            logger.error(f"❌ LangChain Ollama客户端初始化失败 (耗时: {init_time:.2f}秒): {str(e)}")
+            logger.error(f"❌ LangChain Ollama客户端初始化失败 (耗时: {init_time:.2f}秒): {type(e).__name__}")
             # 不抛出异常，允许服务继续运行
             logger.warning("⚠️  LLM服务将以降级模式运行")
             self.llm = None
@@ -105,7 +105,7 @@ class LLMService:
             logger.error(f"❌ Ollama服务连接超时: {self.ollama_host}")
             raise
         except Exception as e:
-            logger.error(f"❌ Ollama服务连接检查失败: {str(e)}")
+            logger.error(f"❌ Ollama服务连接检查失败: {type(e).__name__}")
             raise
     
     def _check_model_availability(self):
@@ -125,7 +125,7 @@ class LLMService:
                 logger.warning(f"⚠️  LangChain模型 {self.model_name} 响应为空")
         except Exception as e:
             check_time = time.time() - check_start
-            logger.error(f"❌ LangChain模型可用性检查失败 (耗时: {check_time:.2f}秒): {str(e)}")
+            logger.error(f"❌ LangChain模型可用性检查失败 (耗时: {check_time:.2f}秒): {type(e).__name__}")
             raise
 
     def _try_reconnect(self) -> bool:
@@ -155,7 +155,7 @@ class LLMService:
                 return False
                 
         except Exception as e:
-            logger.error(f"LLM服务重连失败: {str(e)}")
+            logger.error(f"LLM服务重连失败: {type(e).__name__}")
             self.connection_retry_count += 1
             return False
 
@@ -172,7 +172,7 @@ class LLMService:
                 if response.status_code == 200:
                     return True
             except Exception as e:
-                logger.warning(f"⚠️  LLM连接测试失败，尝试重连: {str(e)}")
+                logger.warning(f"⚠️  LLM连接测试失败，尝试重连: {type(e).__name__}")
         
         # 如果重试次数超过限制，不再尝试
         if self.connection_retry_count >= self.max_retry_count:
@@ -195,7 +195,7 @@ class LLMService:
             return True
             
         except Exception as e:
-            logger.error(f"LangChain LLM模型初始化失败: {str(e)}")
+            logger.error(f"LangChain LLM模型初始化失败: {type(e).__name__}")
             return False
     
     def generate_answer(self, query: str, context: List[Dict], options: Optional[Dict] = None) -> Dict[str, Any]:
@@ -250,7 +250,7 @@ class LLMService:
             }
             
         except Exception as e:
-            logger.error(f"LangChain生成答案失败: {str(e)}")
+            logger.error(f"LangChain生成答案失败: {type(e).__name__}")
             return {
                 'answer': '抱歉，我无法回答您的问题。',
                 'formatted_response': '抱歉，我无法回答您的问题。',
@@ -262,6 +262,7 @@ class LLMService:
     
     def stream_response(self, query: str, context: List[Dict], options: Optional[Dict] = None) -> Generator[str, None, None]:
         """流式输出响应 (使用LangChain Ollama)"""
+        provider_stream = None
         try:
             if self.llm is None:
                 self._initialize_client()
@@ -273,13 +274,19 @@ class LLMService:
             prompt = self.build_prompt(query, context)
             
             # 使用 LangChain API 流式生成
-            for chunk in self.llm.stream(prompt):
+            provider_stream = self.llm.stream(prompt)
+            for chunk in provider_stream:
                 if chunk:
                     yield str(chunk)
                     
         except Exception as e:
-            logger.error(f"LangChain流式输出失败: {str(e)}")
+            logger.error(f"LangChain流式输出失败: {type(e).__name__}")
             raise RuntimeError('AI dependency unavailable') from e
+        finally:
+            if provider_stream is not None:
+                close = getattr(provider_stream, 'close', None)
+                if close is not None:
+                    close()
     
     def evaluate_answer_quality(self, answer: str, query: str, context: List[Dict]) -> float:
         """评估答案质量"""
@@ -322,7 +329,7 @@ class LLMService:
             return final_score / 100.0  # 返回0-1之间的分数
             
         except Exception as e:
-            logger.error(f"评估答案质量失败: {str(e)}")
+            logger.error(f"评估答案质量失败: {type(e).__name__}")
             return 0.5  # 默认中等分数
     
     def format_response(self, answer: str, sources: List[Dict]) -> Dict[str, Any]:
@@ -350,7 +357,7 @@ class LLMService:
             return formatted_response
             
         except Exception as e:
-            logger.error(f"格式化响应失败: {str(e)}")
+            logger.error(f"格式化响应失败: {type(e).__name__}")
             return {
                 'answer': answer,
                 'sources': [],
@@ -395,7 +402,7 @@ class LLMService:
             return prompt
             
         except Exception as e:
-            logger.error(f"构建提示词失败: {str(e)}")
+            logger.error(f"构建提示词失败: {type(e).__name__}")
             return f"请回答以下问题：{query}"
     
     def get_model_info(self) -> Dict[str, Any]:
@@ -422,7 +429,7 @@ class LLMService:
             }
             
         except Exception as e:
-            logger.error(f"获取模型信息失败: {str(e)}")
+            logger.error(f"获取模型信息失败: {type(e).__name__}")
             return {'error': str(e)}
     
     def health_check(self, deep_check: bool = False) -> Dict[str, Any]:
@@ -461,7 +468,7 @@ class LLMService:
                     if test_response:
                         logger.info("LLM服务深度健康检查通过")
                 except Exception as e:
-                    logger.warning(f"LLM服务深度健康检查失败: {str(e)}")
+                    logger.warning(f"LLM服务深度健康检查失败: {type(e).__name__}")
                     status['model_test'] = False
                     # 尝试重连
                     if self.ensure_connection():
@@ -479,7 +486,7 @@ class LLMService:
             return status
             
         except Exception as e:
-            logger.error(f"LangChain LLM服务健康检查失败: {str(e)}")
+            logger.error(f"LangChain LLM服务健康检查失败: {type(e).__name__}")
             return {'error': str(e)}
 
 

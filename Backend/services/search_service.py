@@ -24,6 +24,8 @@ from Backend.models.knowledge import KnowledgeItem
 from Backend.models.search_history import SearchHistory
 from Backend.utils.response import success_response, error_response
 
+from .rag_observability import stage, note
+
 logger = logging.getLogger(__name__)
 
 
@@ -82,7 +84,7 @@ class SearchService:
             logger.info(f"✅ LangChain重排模型 {rerank_model_name} 加载成功 (耗时: {rerank_time:.2f}秒, 离线模式)")
         except Exception as e:
             rerank_time = time.time() - rerank_start
-            logger.error(f"❌ LangChain重排模型加载失败 (耗时: {rerank_time:.2f}秒): {str(e)}")
+            logger.error(f"❌ LangChain重排模型加载失败 (耗时: {rerank_time:.2f}秒): {type(e).__name__}")
             logger.warning("⚠️  重排功能将不可用，但基本检索功能仍可正常工作")
             # 重排模型加载失败不影响基本检索功能
     
@@ -95,7 +97,8 @@ class SearchService:
             if self.cache_enabled:
                 cached_result = self._get_cached_result(query, top_k, filters)
                 if cached_result:
-                    logger.info(f"命中缓存，查询: {query}")
+                    logger.info('命中搜索缓存')
+                    note('candidates', len(cached_result.get('results', [])))
                     return cached_result
             
             # 向量服务可用性检查
@@ -118,13 +121,16 @@ class SearchService:
             
             if vectors_available:
                 # 生成查询向量
-                query_vector = self.vector_service.vectorize_text(query)
+                with stage('query_embedding'):
+                    query_vector = self.vector_service.vectorize_text(query)
                 
                 # 执行向量搜索
-                scores, knowledge_ids = self.vector_service.search_similar(query_vector, top_k)
+                with stage('candidate_retrieval'):
+                    scores, knowledge_ids = self.vector_service.search_similar(query_vector, top_k)
                 
                 # 获取文档详情
-                documents = self._get_documents_by_ids(knowledge_ids, filters)
+                with stage('record_loading'):
+                    documents = self._get_documents_by_ids(knowledge_ids, filters)
                 
                 # 构建结果
                 documents_by_id = {doc.id: doc for doc in documents}
@@ -153,7 +159,9 @@ class SearchService:
             
             # 当无向量可用或无语义结果时，回退到关键词检索
             if not vectors_available or not results:
-                keyword_results = self._keyword_search(query, filters, top_k)
+                note('fallback', 'keyword_no_vectors' if not vectors_available else 'keyword_no_semantic_results')
+                with stage('candidate_retrieval'):
+                    keyword_results = self._keyword_search(query, filters, top_k)
                 # 关键词结果也要记录 rank
                 for i, r in enumerate(keyword_results):
                     r['rank'] = i + 1
@@ -161,6 +169,8 @@ class SearchService:
                 search_type = 'keyword' if not vectors_available else 'semantic_fallback_keyword'
                 response_time = time.time() - start_time
             
+            note('candidates', len(results))
+
             # 记录搜索历史（需要传入user_id）
             self._record_search_history(query, len(results), time.time() - start_time, user_id)
             
@@ -179,10 +189,14 @@ class SearchService:
             }
             
         except Exception as e:
+            note('error', 'retrieval_failure')
+            note('fallback', 'keyword_retrieval_error')
             # 语义检索链路异常时，降级到关键词检索，避免整体返回空
-            logger.error(f"语义检索失败，自动回退关键词检索: {str(e)}")
+            logger.error(f"语义检索失败，自动回退关键词检索: {type(e).__name__}")
             try:
-                fallback_results = self._keyword_search(query, filters, top_k)
+                with stage('candidate_retrieval'):
+                    fallback_results = self._keyword_search(query, filters, top_k)
+                note('candidates', len(fallback_results))
                 for i, r in enumerate(fallback_results):
                     r['rank'] = i + 1
                 return {
@@ -194,7 +208,9 @@ class SearchService:
                     'error': str(e)
                 }
             except Exception as fe:
-                logger.error(f"关键词回退失败: {str(fe)}")
+                note('error', 'retrieval_failure')
+                note('candidates', 0)
+                logger.error(f"关键词回退失败: {type(fe).__name__}")
                 # 最后兜底返回空结构，避免上层收到 Flask 响应元组
                 return {
                     'query': query,
@@ -209,47 +225,52 @@ class SearchService:
         """检索结果重排 (使用LangChain CrossEncoderReranker)"""
         try:
             if not self.rerank_model or not results:
+                note('rerank', 'skipped_unavailable' if not self.rerank_model else 'skipped_empty')
                 return results[:top_k]
-            
-            # 将结果转换为 LangChain Document 格式
-            from langchain.docstore.document import Document
-            documents = []
-            for result in results:
-                content = result.get('content', '') or result.get('title', '')
-                metadata = {
-                    'id': result.get('id'),
-                    'title': result.get('title', ''),
-                    'source_url': result.get('source_url', ''),
-                    'similarity_score': result.get('similarity_score', 0.0)
-                }
-                documents.append(Document(page_content=content, metadata=metadata))
-            
-            # CrossEncoderReranker.compress_documents discards its real scores.
-            # Score the same pairs directly so each result keeps its actual score.
-            scores = self.rerank_model.model.score(
-                [(query, doc.page_content) for doc in documents]
-            )
-            if len(scores) != len(documents):
-                raise ValueError('reranker returned a different score count')
-            ranked = sorted(zip(documents, scores), key=lambda pair: pair[1], reverse=True)
-            
-            # 将 LangChain Document 转换回字典格式
-            reranked_results = []
-            for i, (doc, score) in enumerate(ranked[:top_k]):
-                # 从原始results中找到对应的完整信息
-                doc_id = doc.metadata.get('id')
-                original_result = next((r for r in results if r.get('id') == doc_id), None)
+            note('rerank', 'executed')
+
+            with stage('reranking'):
+                # 将结果转换为 LangChain Document 格式
+                from langchain.docstore.document import Document
+                documents = []
+                for result in results:
+                    content = result.get('content', '') or result.get('title', '')
+                    metadata = {
+                        'id': result.get('id'),
+                        'title': result.get('title', ''),
+                        'source_url': result.get('source_url', ''),
+                        'similarity_score': result.get('similarity_score', 0.0)
+                    }
+                    documents.append(Document(page_content=content, metadata=metadata))
+
+                # CrossEncoderReranker.compress_documents discards its real scores.
+                # Score the same pairs directly so each result keeps its actual score.
+                scores = self.rerank_model.model.score(
+                    [(query, doc.page_content) for doc in documents]
+                )
+                if len(scores) != len(documents):
+                    raise ValueError('reranker returned a different score count')
+                ranked = sorted(zip(documents, scores), key=lambda pair: pair[1], reverse=True)
+
+                # 将 LangChain Document 转换回字典格式
+                reranked_results = []
+                for i, (doc, score) in enumerate(ranked[:top_k]):
+                    # 从原始results中找到对应的完整信息
+                    doc_id = doc.metadata.get('id')
+                    original_result = next((r for r in results if r.get('id') == doc_id), None)
                 
-                if original_result:
-                    result_dict = original_result.copy()
-                    result_dict['rerank_score'] = float(score)
-                    result_dict['rank'] = i + 1
-                    reranked_results.append(result_dict)
+                    if original_result:
+                        result_dict = original_result.copy()
+                        result_dict['rerank_score'] = float(score)
+                        result_dict['rank'] = i + 1
+                        reranked_results.append(result_dict)
             
-            return reranked_results[:top_k]
+                return reranked_results[:top_k]
             
         except Exception as e:
-            logger.error(f"LangChain结果重排失败: {str(e)}")
+            note('rerank', 'failed')
+            note('error', 'reranking_failure')
+            logger.error(f"LangChain结果重排失败: {type(e).__name__}")
             return results[:top_k]  # 返回原始结果
     
     def hybrid_search(self, query: str, filters: Optional[Dict] = None, top_k: int = 20, user_id: Optional[int] = None) -> Dict[str, Any]:
@@ -284,7 +305,7 @@ class SearchService:
             }
             
         except Exception as e:
-            logger.error(f"混合搜索失败: {str(e)}")
+            logger.error(f"混合搜索失败: {type(e).__name__}")
             return error_response(f"混合搜索失败: {str(e)}")
     
     def web_fallback_search(self, query: str, top_k: int = 3) -> Dict[str, Any]:
@@ -295,7 +316,7 @@ class SearchService:
         
         try:
             start_time = time.time()
-            logger.info(f"开始联网搜索（百度）: {query}")
+            logger.info("开始联网搜索（百度）")
             
             # 构建百度搜索URL
             headers = {
@@ -311,7 +332,7 @@ class SearchService:
             }
             
             # 发送搜索请求
-            logger.info(f"发送百度搜索请求: https://www.baidu.com/s?wd={query}")
+            logger.info("发送百度搜索请求")
             response = requests.get(
                 'https://www.baidu.com/s',
                 params=params,
@@ -364,7 +385,7 @@ class SearchService:
                     else:
                         abstract = abstract_elem.get_text(strip=True)
                     
-                    logger.info(f"解析结果 {i+1}: 标题={title[:30]}..., 摘要长度={len(abstract)}")
+                    logger.info(f"解析结果 {i+1}: 摘要长度={len(abstract)}")
                     
                     # 降低要求：只要有标题就添加
                     if title and title != '未知标题':
@@ -385,9 +406,7 @@ class SearchService:
                         })
                         logger.info(f"成功添加搜索结果 {i+1}")
                 except Exception as e:
-                    logger.error(f"解析第{i+1}个搜索结果失败: {str(e)}")
-                    import traceback
-                    logger.error(traceback.format_exc())
+                    logger.error(f"解析第{i+1}个搜索结果失败: {type(e).__name__}")
                     continue
             
             response_time = time.time() - start_time
@@ -405,7 +424,8 @@ class SearchService:
             }
             
         except requests.RequestException as e:
-            logger.error(f"联网搜索请求失败: {str(e)}")
+            note('error', 'retrieval_failure')
+            logger.error(f"联网搜索请求失败: {type(e).__name__}")
             return {
                 'query': query,
                 'results': [],
@@ -416,7 +436,8 @@ class SearchService:
                 'message': '联网搜索失败，请检查网络连接'
             }
         except Exception as e:
-            logger.error(f"联网搜索失败: {str(e)}")
+            note('error', 'retrieval_failure')
+            logger.error(f"联网搜索失败: {type(e).__name__}")
             return {
                 'query': query,
                 'results': [],
@@ -437,12 +458,12 @@ class SearchService:
             
             # 这里可以实现Redis缓存
             # 暂时使用简单的方式
-            logger.info(f"缓存搜索结果: {query}")
+            logger.info("缓存搜索结果")
             
             return True
             
         except Exception as e:
-            logger.error(f"缓存搜索结果失败: {str(e)}")
+            logger.error(f"缓存搜索结果失败: {type(e).__name__}")
             return False
     
     def get_search_suggestions(self, query: str, limit: int = 10) -> List[str]:
@@ -462,7 +483,7 @@ class SearchService:
             return suggestions[:limit]
             
         except Exception as e:
-            logger.error(f"获取搜索建议失败: {str(e)}")
+            logger.error(f"获取搜索建议失败: {type(e).__name__}")
             return []
     
     def _get_documents_by_ids(self, knowledge_ids: List[int], filters: Optional[Dict] = None) -> List[KnowledgeItem]:
@@ -501,7 +522,8 @@ class SearchService:
             return ordered_docs
             
         except Exception as e:
-            logger.error(f"获取文档详情失败: {str(e)}")
+            note('error', 'retrieval_failure')
+            logger.error(f"获取文档详情失败: {type(e).__name__}")
             return []
     
     def _keyword_search(self, query: str, filters: Optional[Dict] = None, top_k: int = 20) -> List[Dict]:
@@ -569,7 +591,8 @@ class SearchService:
             return results
             
         except Exception as e:
-            logger.error(f"关键词搜索失败: {str(e)}")
+            note('error', 'retrieval_failure')
+            logger.error(f"关键词搜索失败: {type(e).__name__}")
             return []
     
     def _merge_search_results(self, semantic_results: List[Dict], keyword_results: List[Dict], top_k: int) -> List[Dict]:
@@ -613,7 +636,7 @@ class SearchService:
             return merged_results[:top_k]
             
         except Exception as e:
-            logger.error(f"合并搜索结果失败: {str(e)}")
+            logger.error(f"合并搜索结果失败: {type(e).__name__}")
             return semantic_results[:top_k]
     
     def _record_search_history(self, query: str, results_count: int, response_time: float, user_id: Optional[int] = None):
@@ -641,10 +664,10 @@ class SearchService:
             
             db.session.add(search_history)
             db.session.commit()
-            logger.debug(f"搜索历史记录成功：用户 {user_id}，查询 '{query}'")
+            logger.debug("搜索历史记录成功")
             
         except Exception as e:
-            logger.error(f"记录搜索历史失败: {str(e)}")
+            logger.error(f"记录搜索历史失败: {type(e).__name__}")
             # 不抛出异常，避免影响搜索结果
     
     def _get_suggestions_from_history(self, query: str, limit: int) -> List[str]:
@@ -666,7 +689,7 @@ class SearchService:
             return [s[0] for s in suggestions]
             
         except Exception as e:
-            logger.error(f"从搜索历史获取建议失败: {str(e)}")
+            logger.error(f"从搜索历史获取建议失败: {type(e).__name__}")
             return []
     
     def _generate_cache_key(self, query: str, filters: Optional[Dict], top_k: int) -> str:
@@ -721,7 +744,7 @@ class SearchService:
             return status
             
         except Exception as e:
-            logger.error(f"搜索服务健康检查失败: {str(e)}")
+            logger.error(f"搜索服务健康检查失败: {type(e).__name__}")
             return {'error': str(e)}
 
 

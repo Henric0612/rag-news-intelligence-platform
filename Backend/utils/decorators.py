@@ -25,13 +25,13 @@ def jwt_required():
                 logger.error("JWT认证失败: 未提供认证令牌")
                 return error_response('未提供认证令牌', 401)
             
-            logger.info(f"JWT认证检查 - 找到认证头: {auth_header[:20]}...")
+            logger.info("JWT认证检查 - 已提供认证头")
             
             # 解析Bearer token
             try:
                 token_type, token = auth_header.split(' ')
                 if token_type.lower() != 'bearer':
-                    logger.error(f"JWT认证失败: 无效的认证类型 {token_type}")
+                    logger.error("JWT认证失败: 无效的认证类型")
                     return error_response('无效的认证类型', 401)
             except ValueError:
                 logger.error("JWT认证失败: 无效的认证格式")
@@ -47,7 +47,7 @@ def jwt_required():
                 payload = verify_token(token)
                 request.current_user_id = payload['user_id']
                 request.current_token = token  # ✅ 保存token供后续使用
-                logger.info(f"JWT认证成功 - 用户ID: {payload['user_id']}")
+                logger.info("JWT认证成功")
             except ValueError as e:
                 logger.error(f"JWT认证失败: {str(e)}")
                 return error_response(str(e), 401)
@@ -87,7 +87,7 @@ def validate_json(schema_class):
             # 添加调试日志
             import logging
             logger = logging.getLogger(__name__)
-            logger.info(f"收到JSON数据: {json_data}")
+            logger.info("收到JSON请求")
             
             # 创建schema实例并验证数据
             try:
@@ -95,9 +95,9 @@ def validate_json(schema_class):
                 validated_data = schema.load(json_data)
                 # 将验证后的数据添加到request对象中
                 request.validated_data = validated_data
-                logger.info(f"数据验证成功: {validated_data}")
+                logger.info("JSON验证成功")
             except ValidationError as e:
-                logger.error(f"数据验证失败: {e.messages}")
+                logger.error("JSON验证失败")
                 return error_response(f'数据验证失败: {e.messages}', 400)
             
             return f(*args, **kwargs)

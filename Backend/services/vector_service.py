@@ -79,7 +79,7 @@ class VectorService:
             logger.info(f"✅ LangChain嵌入模型 {model_name} 加载成功 (耗时: {model_time:.2f}秒, 离线模式)")
         except Exception as e:
             model_time = time.time() - model_start
-            logger.error(f"❌ LangChain嵌入模型加载失败 (耗时: {model_time:.2f}秒): {str(e)}")
+            logger.error(f"❌ LangChain嵌入模型加载失败 (耗时: {model_time:.2f}秒): {type(e).__name__}")
             # 如果模型加载失败，尝试使用备用方案
             logger.warning("⚠️  尝试使用备用嵌入方案...")
             self._initialize_fallback_model()
@@ -114,7 +114,7 @@ class VectorService:
             logger.info(f"备用嵌入模型 {model_name} 加载成功（离线模式）")
             
         except Exception as e:
-            logger.error(f"备用嵌入模型加载失败: {str(e)}")
+            logger.error(f"备用嵌入模型加载失败: {type(e).__name__}")
             # 最后的备用方案：使用随机向量
             logger.warning("使用随机向量作为最后备用方案...")
             self._initialize_random_embeddings()
@@ -141,7 +141,7 @@ class VectorService:
             logger.warning("使用随机向量嵌入（仅用于测试，不建议生产使用）")
             
         except Exception as e:
-            logger.error(f"随机向量嵌入初始化失败: {str(e)}")
+            logger.error(f"随机向量嵌入初始化失败: {type(e).__name__}")
             raise RuntimeError("所有嵌入模型初始化方案都失败了")
     
     def _initialize_index(self):
@@ -163,7 +163,7 @@ class VectorService:
                 logger.info(f"✅ 创建新的FAISS索引 (耗时: {index_time:.2f}秒)")
         except Exception as e:
             index_time = time.time() - index_start
-            logger.error(f"❌ FAISS索引初始化失败 (耗时: {index_time:.2f}秒): {str(e)}")
+            logger.error(f"❌ FAISS索引初始化失败 (耗时: {index_time:.2f}秒): {type(e).__name__}")
             raise
     
     def load_embedding_model(self) -> bool:
@@ -173,7 +173,7 @@ class VectorService:
                 self._initialize_model()
             return True
         except Exception as e:
-            logger.error(f"加载嵌入模型失败: {str(e)}")
+            logger.error(f"加载嵌入模型失败: {type(e).__name__}")
             return False
     
     def vectorize_text(self, text: str) -> np.ndarray:
@@ -189,7 +189,7 @@ class VectorService:
             vector = self.embedding_model.embed_query(processed_text)
             return np.array(vector)  # 转换为numpy数组
         except Exception as e:
-            logger.error(f"文本向量化失败: {str(e)}")
+            logger.error(f"文本向量化失败: {type(e).__name__}")
             raise
     
     def batch_vectorize(self, texts: List[str]) -> np.ndarray:
@@ -205,7 +205,7 @@ class VectorService:
             vectors = self.embedding_model.embed_documents(processed_texts)
             return np.array(vectors)  # 转换为numpy数组
         except Exception as e:
-            logger.error(f"批量文本向量化失败: {str(e)}")
+            logger.error(f"批量文本向量化失败: {type(e).__name__}")
             raise
     
     def build_faiss_index(self, vectors: np.ndarray, knowledge_ids: List[int]) -> bool:
@@ -230,7 +230,7 @@ class VectorService:
             logger.info(f"FAISS索引构建成功，包含 {len(knowledge_ids)} 个向量")
             return True
         except Exception as e:
-            logger.error(f"构建FAISS索引失败: {str(e)}")
+            logger.error(f"构建FAISS索引失败: {type(e).__name__}")
             return False
     
     def update_vector_index(self, new_vectors: np.ndarray, new_knowledge_ids: List[int]) -> bool:
@@ -259,7 +259,7 @@ class VectorService:
             logger.info(f"向量索引更新成功，新增 {len(new_knowledge_ids)} 个向量")
             return True
         except Exception as e:
-            logger.error(f"更新向量索引失败: {str(e)}")
+            logger.error(f"更新向量索引失败: {type(e).__name__}")
             return False
 
     def clear_index(self) -> bool:
@@ -273,7 +273,7 @@ class VectorService:
             logger.info("向量索引已清空并重建")
             return True
         except Exception as e:
-            logger.error(f"清空向量索引失败: {str(e)}")
+            logger.error(f"清空向量索引失败: {type(e).__name__}")
             return False
 
     def add_document(self, knowledge_id: int, text: str) -> int:
@@ -304,7 +304,7 @@ class VectorService:
             self.save_vector_index()
             return new_vector_id
         except Exception as e:
-            logger.error(f"添加向量文档失败: {str(e)}")
+            logger.error(f"添加向量文档失败: {type(e).__name__}")
             raise
 
     def delete_document(self, vector_id: int) -> bool:
@@ -338,7 +338,7 @@ class VectorService:
                 return True
             return False
         except Exception as e:
-            logger.error(f"删除向量映射失败: {str(e)}")
+            logger.error(f"删除向量映射失败: {type(e).__name__}")
             return False
     
     def save_vector_index(self) -> bool:
@@ -357,7 +357,7 @@ class VectorService:
             logger.info("向量索引保存成功")
             return True
         except Exception as e:
-            logger.error(f"保存向量索引失败: {str(e)}")
+            logger.error(f"保存向量索引失败: {type(e).__name__}")
             return False
     
     def load_vector_index(self) -> bool:
@@ -377,7 +377,7 @@ class VectorService:
             logger.info(f"向量索引加载成功，包含 {len(self.id_mapping)} 个向量")
             return True
         except Exception as e:
-            logger.error(f"加载向量索引失败: {str(e)}")
+            logger.error(f"加载向量索引失败: {type(e).__name__}")
             return False
     
     def search_similar(self, query_vector: np.ndarray, top_k: int = 20) -> Tuple[np.ndarray, List[int]]:
@@ -403,7 +403,7 @@ class VectorService:
             
             return scores[0], knowledge_ids
         except Exception as e:
-            logger.error(f"向量相似度搜索失败: {str(e)}")
+            logger.error(f"向量相似度搜索失败: {type(e).__name__}")
             raise
     
     def get_index_stats(self) -> Dict[str, Any]:
@@ -418,7 +418,7 @@ class VectorService:
                 'id_mapping_path': self.id_mapping_path
             }
         except Exception as e:
-            logger.error(f"获取索引统计信息失败: {str(e)}")
+            logger.error(f"获取索引统计信息失败: {type(e).__name__}")
             return {}
     
     def _preprocess_text(self, text: str) -> str:
@@ -462,7 +462,7 @@ class VectorService:
                     test_vector = self.vectorize_text("测试文本")
                     vectorization_test = len(test_vector) == self.dimension
                 except Exception as e:
-                    logger.warning(f"向量化测试失败: {str(e)}")
+                    logger.warning(f"向量化测试失败: {type(e).__name__}")
                     vectorization_test = False
             
             # 综合健康状态判断
@@ -495,7 +495,7 @@ class VectorService:
             
             return status
         except Exception as e:
-            logger.error(f"健康检查失败: {str(e)}")
+            logger.error(f"健康检查失败: {type(e).__name__}")
             return {
                 'error': str(e),
                 'is_healthy': False,

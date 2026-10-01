@@ -85,6 +85,8 @@ def create_app(config_name=None):
     
     app = Flask(__name__)
     app.config.from_object(config[config_name])
+    from .services.rag_observability import RAGMetrics
+    app.extensions['rag_metrics'] = RAGMetrics()
     
     if not is_reloader_process:
         print("OK")

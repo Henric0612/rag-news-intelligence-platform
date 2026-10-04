@@ -51,7 +51,7 @@ The Frontend full image build is a daily required check. The Backend full image 
 | Frontend state, request, URL and controlled SSE contracts | `qwen3:8b` generation, Ollama/GPU integration, and real RAG behavior |
 | Frontend production/image builds and static Compose configuration validity | Service startup/readiness and end-to-end behavior in the user's environment |
 
-Mocked CI contracts are not real-AI end-to-end tests. Browser E2E remains a deferred local asset. Phase D retrieval/reranking evaluation, answer grounding, latency measurement, and observability are not implemented by Phase C.
+Mocked CI contracts are not real-AI end-to-end tests. Browser E2E remains a deferred local asset. Phase D retrieval/reranking evaluation, answer grounding, latency measurement, and observability were intentionally outside Phase C and were implemented later in Phase D.
 
 ## Protected `main`
 
@@ -65,5 +65,4 @@ Current deferred items:
 
 - **Pre-existing debt:** Browser E2E readiness; security/performance harness validation; broader configuration and persistence-path issues; full-repository lint/type gates and Frontend chunk optimization.
 - **Build improvement:** base-image digest pinning and dependency-update automation, to revisit when their cost and benefit are measured.
-- **Phase D:** retrieval/reranking evaluation, groundedness, latency benchmarks, metrics, and tracing.
 - **Later platform work:** cloud deployment, Kubernetes, distributed serving, and production secrets/TLS/migration infrastructure.

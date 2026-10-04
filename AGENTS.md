@@ -146,6 +146,21 @@ Never commit:
 - build outputs;
 - machine-specific runtime artifacts.
 
+### Protected `main` Delivery
+
+`main` is protected. Do not push directly to `main`, force push, or modify or bypass branch protection.
+
+When a task explicitly requests delivery to remote `main`, the process is:
+
+1. make changes on a non-`main` task branch, push that branch, and open a pull request targeting `main`;
+2. merge only after all repository-required checks succeed; do not add or remove required checks;
+3. use the normal merge mechanism allowed by the repository rules;
+4. after the merge, re-read the actual `origin/main` SHA; this post-merge SHA is authoritative for any SHA-specific validation.
+
+Additional post-merge validation, such as Backend Image Validation, a particular workflow, or deployment or release validation, is required only when the task, phase, or acceptance criteria explicitly require it. If such validation has completed and the `main` SHA changes afterward, that validation no longer applies to the new SHA.
+
+This describes the process only; it does not authorize committing, pushing, creating branches, opening pull requests, or merging. The current required checks are documented in the [Phase C guide](Docs/Phase-C-CI.md) and the actual repository rules; see the [Phase D guide](Docs/Phase-D-Evaluation.md) for an example phase closeout procedure.
+
 ---
 
 ## Security Scope

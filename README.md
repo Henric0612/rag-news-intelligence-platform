@@ -14,7 +14,7 @@ The portfolio focus is the end-to-end engineering workflow: ingestion, persisten
 
 The project evolved from an academic full-stack RAG application into a more reproducible and verifiable local AI engineering system. Phase B added explicit container boundaries, persistent state, dependency-failure semantics, and complementary native-development and container-validation workflows—it is more than a demo placed inside Docker.
 
-Current stage: **Phase B complete; Phase C complete; Phase D evaluation and observability implemented and accepted through D4.** Final documentation and exact-SHA closeout requirements are recorded in the [Phase D guide](Docs/Phase-D-Evaluation.md).
+Current stage: **Phase B complete; Phase C complete; Phase D is complete.** The evaluation foundation, retrieval/reranking baseline, human-reviewed answer/grounding/refusal evaluation, latency/observability work, and final protected-main exact-SHA acceptance are finished. Evidence, limitations, and the acceptance workflow are recorded in the [Phase D guide](Docs/Phase-D-Evaluation.md).
 
 ## Problem
 
@@ -224,9 +224,9 @@ The human engineering contribution focused on problem definition, system archite
 
 ### Phase D — Evaluated and Observable RAG System
 
-- **Implemented and accepted through D4:** versioned synthetic evaluation, retrieval/reranking comparison, human answer/grounding/refusal review, repeatability observations, stage timing and request correlation.
+- **Complete:** versioned synthetic evaluation, retrieval/reranking comparison, human answer/grounding/refusal review, repeatability observations, stage timing and request correlation.
 - Normal and streaming RAG expose metadata events and an admin-only process-local `/api/rag/metrics` endpoint; restart clears metrics.
-- Final acceptance requires local/isolated Compose checks, clean repository state, and Daily CI plus Backend Image Validation on the exact final main SHA. See the [Phase D guide](Docs/Phase-D-Evaluation.md).
+- Local native and isolated Compose validation passed, and final acceptance was completed through the protected-main PR workflow with Daily CI plus Backend Image Validation on the exact final main SHA. See the [Phase D guide](Docs/Phase-D-Evaluation.md).
 - Independent real-news validation, chunking/retrieval improvements and exporters/collectors/dashboards remain deferred.
 
 ### Later — AI Platform Evolution (Deferred)

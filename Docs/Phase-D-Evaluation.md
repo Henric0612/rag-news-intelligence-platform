@@ -400,22 +400,35 @@ The documentation commit is accepted only when **all** items hold:
   secrets, user data, SQLite, FAISS, models, coverage or runtime reports.
 - The temporary untracked implementation plan is deleted after its relevant
   requirements have been absorbed here; it is never committed.
-- Create one documentation commit, fetch origin, verify main and no unknown
-  divergence, then use only normal `git push origin main`. Rejection is a
-  blocker; do not rebase, merge, force push, change protection, branch or PR.
-- On the exact pushed final main SHA, all four existing Daily CI checks are
+- `main` is protected: final documentation changes are committed on a
+  temporary closeout branch, which is pushed and merged through a PR targeting
+  `main`. Never push directly to `main`, force push, or change protection.
+- The PR merges only after the four required checks `backend-contracts`,
+  `frontend-contracts`, `frontend-image` and `compose-config` succeed, using a
+  normal merge mechanism allowed by the repository rules.
+- After the merge, fetch origin and read the actual `origin/main` SHA; only this
+  post-merge SHA is the candidate final SHA.
+- On that exact final main SHA, all four existing Daily CI checks are
   successful and **Backend Image Validation is SUCCESS on that same SHA**.
-- Local HEAD equals accepted origin/main, staged/tracked/untracked state is
-  clean, and no validation branch or runtime artifact entered the repository.
+- Local main is safely synchronized to the accepted origin/main, the temporary
+  closeout branch is cleaned up, staged/tracked/untracked state is clean, and
+  no validation branch or runtime artifact entered the repository.
 
-After a successful push, the existing workflow can be invoked and inspected:
+After the PR merges, identify the final SHA, then invoke and inspect the
+existing workflows on it:
 
 ```bash
+git fetch origin
+FINAL_SHA=$(git rev-parse origin/main)
 gh workflow run backend-image.yml --ref main
-gh run list --commit "$(git rev-parse HEAD)"
+gh run list --commit "$FINAL_SHA"
 git rev-parse HEAD origin/main
 git status --short
 ```
+
+GitHub PR history and Actions runs are the evidence source for the exact final
+SHA; this guide does not record it, because any documentation change produces
+a new one.
 
 Confirm workflow identity, run identity, head SHA, completed status and success
 conclusion, including the four jobs inside Daily CI. An old D1–D4 success

@@ -4,19 +4,22 @@
 
 `rag-news-intelligence-platform` is a local-first RAG engineering portfolio project.
 
-Its purpose is to demonstrate credible end-to-end AI application engineering, including:
+Its purpose is to demonstrate credible end-to-end AI application engineering across:
 
 - content ingestion and knowledge management;
 - embedding, FAISS retrieval, and reranking;
 - context construction and local LLM generation;
 - Flask API and Vue frontend integration;
-- testing, reproducibility, containerization, evaluation, and operational evolution.
+- testing and CI;
+- containerized reproducibility;
+- RAG evaluation;
+- latency measurement and runtime observability.
 
 The project is:
 
 > **production-oriented, but not production-ready.**
 
-Do not turn it into a production platform unless the current phase explicitly requires that work.
+Do not present or evolve it as a production platform unless a future task explicitly establishes that scope.
 
 ---
 
@@ -24,142 +27,286 @@ Do not turn it into a production platform unless the current phase explicitly re
 
 > **Evidence before complexity.**
 
-Before introducing a new component, abstraction, service, dependency, or infrastructure layer, confirm that it solves a demonstrated problem in the current project.
+Before introducing a component, abstraction, dependency, service, or infrastructure layer, confirm that it solves a demonstrated problem or materially improves engineering evidence.
 
 Prefer:
 
 - minimal necessary architecture;
 - reproducible behavior;
 - explicit trade-offs;
-- preservation of existing working behavior;
-- changes that provide clear engineering or portfolio value.
+- preservation of working behavior;
+- changes with clear engineering or portfolio value.
 
-Do not add technology only because it is common in production systems.
+Do not add technology merely because it is common in production environments or attractive on a résumé.
 
 ---
 
-## Primary Development Environment
+## Established Engineering Baseline
 
-Primary local development environment:
+Engineering Phases B, C, and D are complete.
+
+Treat their accepted behavior and evidence as the current project baseline, not as future implementation work.
+
+The established system includes:
+
+- Flask / Gunicorn backend;
+- Vue / Vite / Caddy frontend;
+- SQLite persistence;
+- FAISS retrieval;
+- Sentence Transformers embeddings;
+- CrossEncoder reranking;
+- Ollama-backed local generation with `qwen3:8b`;
+- Docker Compose local orchestration;
+- GitHub Actions CI;
+- versioned RAG evaluation;
+- request and stage latency instrumentation;
+- process-local RAG runtime metrics.
+
+Authoritative detail lives in:
+
+- `README.md`
+- `Backend/README.md`
+- `Frontend/README.md`
+- `Docs/Phase-C-CI.md`
+- `Docs/Phase-D-Evaluation.md`
+- `Backend/evaluation/README.md`
+
+Do not duplicate detailed metrics, CI contracts, dependency versions, or reproduction procedures here when an authoritative repository artifact already maintains them.
+
+Phase D measurements are informational engineering evidence.
+
+Do not reinterpret them as:
+
+- production SLOs;
+- throughput guarantees;
+- regression thresholds;
+- production-news quality claims;
+- proof that reranking improves aggregate quality.
+
+---
+
+## Development Environment
+
+Primary development is WSL-native.
+
+Expected architecture:
 
 ```text
-Windows 11
-└── WSL2 / Ubuntu-24.04
-    └── /home/henric/projects/rag-news-intelligence-platform
+Windows
+└── VS Code + Remote-WSL
+    └── WSL2 / Ubuntu
+        └── repository on the Linux filesystem
 ```
 
-Use the Linux filesystem for repository development.
+For ordinary repository development:
 
-Do not move the primary repository into `/mnt/c/...`.
+- keep the repository on the WSL Linux filesystem rather than `/mnt/c/...`;
+- run Git, Python, Node, tests, builds, and development tooling inside WSL;
+- use the project-managed Python environment rather than the system Python for backend work;
+- use repository-defined frontend tooling rather than Windows-side Node/npm;
+- do not route normal development through `wsl.exe`, PowerShell, or Windows development binaries.
 
-Current native development path should remain usable unless a task explicitly changes that requirement.
-
----
-
-## Current Runtime Direction
-
-The current application architecture is based on:
-
-- Python / Flask backend;
-- Vue frontend;
-- SQLite;
-- FAISS;
-- Sentence Transformers embedding;
-- CrossEncoder reranking;
-- Ollama with `qwen3:8b`.
-
-Ollama currently runs as a WSL host service and uses the local NVIDIA GPU.
-
-Do not change the Ollama, GPU, WSL, or host-networking architecture without evidence and explicit task scope.
-
----
-
-## Container Runtime
-
-For local containerization, use:
+Local container execution uses:
 
 > **Docker Desktop + WSL Integration**
 
-Do not install a second Docker Engine daemon inside Ubuntu unless explicitly required by a future task.
+Do not install or configure a second Docker Engine daemon inside Ubuntu unless explicitly required by a future task.
 
-Avoid creating competing Docker runtime states.
+Ollama remains a WSL host service and is not a Compose service.
 
-Docker Compose is intended for reproducible local container execution and validation.
+Native WSL development is the preferred edit/debug loop; Compose provides the reproducible container workflow.
 
-Native WSL development remains the preferred fast development/debug loop unless explicitly changed.
-
----
-
-## Working Rules
-
-### Audit Before Change
-
-Inspect the real repository, dependencies, configuration, tests, and runtime behavior before modifying them.
-
-Do not rely only on README claims when code evidence is available.
-
-### Preserve Existing Behavior
-
-Containerization, CI, evaluation, and operational improvements should preserve existing application behavior unless a change is explicitly required.
-
-Do not redesign the RAG pipeline as a side effect of infrastructure work.
-
-### Minimal Change
-
-Prefer the smallest change that satisfies the current objective and validation criteria.
-
-Do not perform unrelated cleanup while implementing a scoped task.
-
-### Existing Issues
-
-Do not silently fix pre-existing test failures, dependency debt, frontend warnings, or unrelated technical debt unless they directly block the current task.
-
-Record unrelated issues separately.
-
-### Destructive Operations
-
-Do not execute destructive database initialization, reset, deletion, migration, or volume removal without first determining the impact.
-
-Treat commands equivalent to `docker compose down -v`, database `drop_all`, or destructive migrations with special care.
+Do not redesign the Docker, WSL, GPU, Ollama, or host-networking architecture without explicit scope and supporting evidence.
 
 ---
 
-## Repository Changes
+## Agent Workflow
+
+For architecture-heavy, ambiguous, or substantial multi-file work, use:
+
+> **Explore → Plan → Human Review → Implement → Verify → Independent Review**
+
+### Explore
+
+Inspect the real repository before proposing changes.
+
+Use current:
+
+- code;
+- configuration;
+- tests;
+- Git state and history;
+- runtime behavior;
+- authoritative documentation
+
+as evidence.
+
+Do not rely only on README claims when stronger implementation evidence is available.
+
+### Plan
+
+Plan when meaningful implementation or architectural decisions remain unresolved.
+
+A useful plan defines:
+
+- objective;
+- scope;
+- constraints;
+- affected components;
+- important trade-offs;
+- validation criteria;
+- Definition of Done.
+
+If an approved implementation plan or exact specification already exists, execute it rather than redesigning it.
+
+Reopen an approved decision only when new evidence invalidates an assumption.
+
+Small and obvious changes do not require ceremonial planning.
+
+### Human Review
+
+Preserve a human approval point for consequential architecture, scope, or irreversible decisions.
+
+Do not silently expand an accepted task.
+
+### Implement
+
+Make the smallest coherent change that satisfies the objective.
+
+Preserve unrelated behavior and unrelated working-tree changes.
+
+Do not bundle unrelated refactoring or cleanup into scoped implementation work.
+
+### Verify
+
+Implementation is not complete until relevant behavior has been validated with executable evidence.
+
+### Independent Review
+
+For substantial changes, prefer a fresh-context review of the resulting diff and validation evidence.
+
+Review should look for:
+
+- requirement gaps;
+- regressions;
+- unsupported claims;
+- accidental scope expansion;
+- missing validation;
+- unnecessary complexity.
+
+If mandatory findings exist, perform bounded repairs and review again.
+
+---
+
+## Change Discipline
 
 Before editing tracked files:
 
-1. inspect the current working tree;
-2. understand the relevant code path;
-3. preserve unrelated changes;
-4. validate the intended behavior after modification.
+1. inspect the working tree;
+2. inspect the relevant implementation path;
+3. understand relevant tests and configuration;
+4. preserve unrelated changes;
+5. identify the smallest valid change.
 
-Do not commit, push, create branches, or open pull requests unless the task explicitly requests it.
+Do not silently fix:
+
+- pre-existing test failures;
+- warnings;
+- dependency debt;
+- unrelated technical debt;
+- unrelated documentation drift
+
+unless they directly block the current task.
+
+Record unrelated findings separately and defer them.
+
+---
+
+## Validation
+
+> **Running is not enough. Validate behavior.**
+
+Use the smallest relevant validation first, then broaden when justified.
+
+Depending on scope, validation may include:
+
+- targeted unit or integration tests;
+- backend or frontend contract suites;
+- frontend production build;
+- Docker image build;
+- Compose configuration;
+- startup and health/readiness;
+- native WSL workflow;
+- container workflow;
+- persistence behavior;
+- dependency failure behavior;
+- end-to-end RAG behavior;
+- evaluation tooling;
+- CI workflow evidence.
+
+Never report a test, build, benchmark, workflow, or runtime check as passing unless it was actually executed or verified from authoritative evidence.
+
+Distinguish clearly between:
+
+- environment failure;
+- application failure;
+- regression introduced by the current change;
+- pre-existing repository issue;
+- deferred future improvement.
+
+Do not report one category as another.
+
+---
+
+## Git and Delivery
+
+Inspect `git status` and relevant diffs before repository changes.
+
+Do not:
+
+- commit;
+- push;
+- create or delete branches;
+- rewrite history;
+- open or merge pull requests
+
+unless the current task explicitly authorizes the action.
+
+When delivery to `main` is requested, preserve the repository's documented protected-main PR and CI workflow.
+
+Do not bypass established branch or CI governance merely to complete a task faster.
 
 Never commit:
 
 - real secrets;
-- `.env` files containing credentials;
+- credential-bearing `.env` files;
 - local databases;
 - FAISS runtime indexes;
 - uploads;
-- model binaries;
+- model binaries or caches;
 - build outputs;
+- local evaluation reports;
 - machine-specific runtime artifacts.
 
-### Protected `main` Delivery
+---
 
-`main` is protected. Do not push directly to `main`, force push, or modify or bypass branch protection.
+## Destructive and Host-Level Operations
 
-When a task explicitly requests delivery to remote `main`, the process is:
+Treat destructive or host-level operations as approval-gated.
 
-1. make changes on a non-`main` task branch, push that branch, and open a pull request targeting `main`;
-2. merge only after all repository-required checks succeed; do not add or remove required checks;
-3. use the normal merge mechanism allowed by the repository rules;
-4. after the merge, re-read the actual `origin/main` SHA; this post-merge SHA is authoritative for any SHA-specific validation.
+Examples include:
 
-Additional post-merge validation, such as Backend Image Validation, a particular workflow, or deployment or release validation, is required only when the task, phase, or acceptance criteria explicitly require it. If such validation has completed and the `main` SHA changes afterward, that validation no longer applies to the new SHA.
+- database reset or destructive migration;
+- `docker compose down -v`;
+- Docker volume deletion;
+- destructive filesystem operations;
+- history-rewriting Git operations;
+- WSL configuration changes;
+- Docker daemon changes;
+- host package or driver changes;
+- Ollama service changes.
 
-This describes the process only; it does not authorize committing, pushing, creating branches, opening pull requests, or merging. The current required checks are documented in the [Phase C guide](Docs/Phase-C-CI.md) and the actual repository rules; see the [Phase D guide](Docs/Phase-D-Evaluation.md) for an example phase closeout procedure.
+Do not modify the host environment merely to work around a repository problem unless explicitly approved.
 
 ---
 
@@ -167,62 +314,98 @@ This describes the process only; it does not authorize committing, pushing, crea
 
 Security is not a standalone engineering workstream unless explicitly requested.
 
-Avoid obvious container anti-patterns, including:
+Avoid obvious anti-patterns such as:
 
 - committed secrets;
-- unnecessary `privileged` containers;
+- unnecessary privileged containers;
 - unnecessary Docker socket mounts;
 - unnecessary public host-port exposure.
 
-Prefer a non-root container user when straightforward, but do not create significant permission or UID/GID complexity solely to satisfy that preference.
+Prefer straightforward secure defaults when they do not create disproportionate complexity.
 
-Do not expand ordinary Phase B work into rootless Docker, Podman, capability hardening, Kubernetes security, or supply-chain security without demonstrated need.
+Do not expand ordinary work into:
 
----
+- Kubernetes security;
+- supply-chain hardening;
+- rootless-container architecture;
+- enterprise security infrastructure
 
-## Phase Boundaries
-
-### Phase B — Containerized RAG Stack
-
-Focus:
-
-- backend and frontend containerization;
-- Docker Compose orchestration;
-- configuration;
-- persistence;
-- health/readiness;
-- local AI runtime integration;
-- reproducible startup and validation.
-
-Do not pull Phase C or D work into Phase B.
-
-### Phase C — CI-Tested AI Application
-
-Focus:
-
-- GitHub Actions;
-- automated backend/frontend tests;
-- repeatable builds;
-- coverage and quality gates.
-
-### Phase D — Evaluated and Observable RAG System
-
-Focus:
-
-- retrieval/reranking evaluation;
-- answer grounding;
-- latency measurement;
-- metrics, tracing, and observability.
-
-### Later
-
-Kubernetes, distributed serving, cloud deployment, and deeper AI platform engineering should only be introduced after earlier foundations justify them.
+without demonstrated need and explicit scope.
 
 ---
 
-## Naming
+## RAG and Evaluation Discipline
 
-Canonical repository identity:
+Do not redesign the RAG pipeline as a side effect of infrastructure, CI, documentation, or operational work.
+
+Changes to:
+
+- ingestion;
+- embeddings;
+- retrieval;
+- reranking;
+- context construction;
+- generation;
+- refusal behavior;
+- evaluation methodology
+
+must be explicitly in scope and validated at the appropriate layer.
+
+Preserve the distinction between:
+
+- deterministic software validation;
+- synthetic evaluation evidence;
+- human-reviewed answer quality;
+- local runtime observations;
+- production-quality claims.
+
+Do not convert informational evaluation results into quality gates without an explicit engineering decision.
+
+---
+
+## Portfolio and Documentation Discipline
+
+This repository supports a credible engineering career narrative.
+
+Portfolio value must come from demonstrated engineering judgment and evidence, not technology count.
+
+For README, architecture documentation, résumé-oriented material, or engineering claims:
+
+- support claims with repository or runtime evidence;
+- describe limitations explicitly;
+- distinguish measured results from aspirations;
+- do not exaggerate scalability, reliability, security, AI quality, or production readiness;
+- preserve the project's AI-assisted-development disclosure.
+
+The preferred engineering story is:
+
+> increasingly reproducible, testable, evaluated, and observable engineering built from demonstrated needs.
+
+Not:
+
+> accumulation of production technologies for their own sake.
+
+Documentation should describe the system that actually exists.
+
+If code and documentation disagree, investigate and determine the current intended behavior before changing either.
+
+---
+
+## Scope Discipline
+
+If useful work is discovered outside the current task:
+
+> **record it, classify it, and defer it.**
+
+Do not automatically turn a focused task into a new engineering phase.
+
+Future evolution may include cloud deployment, Kubernetes, distributed serving, deeper model-serving infrastructure, or broader observability, but only when a future objective establishes the need.
+
+---
+
+## Repository Identity
+
+Canonical project name:
 
 ```text
 rag-news-intelligence-platform
@@ -234,67 +417,4 @@ Canonical GitHub repository:
 Henric0612/rag-news-intelligence-platform
 ```
 
-Legacy names such as `XU-AI-RAG` should not be introduced into new implementation or documentation.
-
-Historical references may remain only when their historical meaning is intentional.
-
----
-
-## Codex Workflow
-
-For architecture-heavy or ambiguous work:
-
-> **Plan → Human Review → Goal**
-
-Use Plan Mode to investigate and design when important engineering decisions remain unresolved.
-
-Use Goal Mode after:
-
-- objective;
-- scope;
-- constraints;
-- approval gates;
-- validation criteria;
-- Definition of Done
-
-are sufficiently clear.
-
-Do not repeatedly redesign an approved plan during implementation unless new evidence invalidates it.
-
----
-
-## Validation Principle
-
-> **Running is not enough. Validate behavior.**
-
-Where applicable, verify:
-
-- build;
-- startup;
-- health/readiness;
-- native workflow regression;
-- container workflow;
-- persistence;
-- failure behavior;
-- end-to-end RAG behavior.
-
-Distinguish:
-
-> environment failure
-> application failure
-> pre-existing repository issue
-> future-phase improvement
-
-Do not report one category as another.
-
----
-
-## Scope Discipline
-
-If useful work is discovered outside the current task:
-
-> record it, classify it, and defer it.
-
-Do not automatically expand the current implementation.
-
-The project should become more credible through evidence and validation, not through accumulating infrastructure.
+Do not introduce legacy project names into new implementation or documentation unless the historical reference is intentional.

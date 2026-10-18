@@ -65,6 +65,18 @@ jobs:
           python3 -m deploy.rag_delivery gate \
             --source-dir "$RUNNER_TEMP/release-source" \
             --evidence artifacts/gate-evidence.json
+      # CD-WP4 Compose image-only assertions, run with the tool and Compose
+      # files of the exact-SHA worktree the gate step checked out. A missing
+      # tool, override or Compose CLI fails the gate; the log is the evidence.
+      - name: Check Compose release mode at the exact SHA
+        env:
+          RELEASE_SHA: ${{ steps.gate.outputs.sha }}
+        run: |
+          cd "$RUNNER_TEMP/release-source"
+          test -n "$RELEASE_SHA"
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          docker compose version
+          python3 -m deploy.rag_delivery.compose_check
       - name: Upload gate evidence
         uses: actions/upload-artifact@v7
         with:

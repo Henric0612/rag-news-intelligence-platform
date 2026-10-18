@@ -35,3 +35,7 @@ jobs:
           git rev-parse HEAD
       - name: Run delivery tool contracts
         run: python3 -m unittest discover deploy/tests
+      - name: Check Compose release mode
+        run: |
+          docker compose version
+          python3 -m deploy.rag_delivery.compose_check

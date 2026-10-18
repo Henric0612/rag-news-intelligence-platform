@@ -296,6 +296,49 @@ a ruleset or disabling Immutable Releases) requires the same approval level.
 
 Until G1 is verified and D1 is complete, no `v*` tag is created.
 
+## Build and runtime identity (CD-WP2)
+
+`Backend/version.py` `get_build_info()` reads `APP_VERSION` (default
+`0.0.0-dev`) and `GIT_SHA` (default `unknown`) from the process environment on
+every call; nothing is cached. `GET /api/health` returns both as `version`
+and `git_sha`; its other fields, status code and liveness semantics, and
+`/api/ready`, are unchanged. `Backend.__version__` takes its value from the
+same function, so the repository holds no Backend version literal.
+
+| Image | Build arguments (default) | Runtime `ENV` | OCI labels |
+| --- | --- | --- | --- |
+| Backend | `APP_VERSION` (`0.0.0-dev`), `GIT_SHA` (`unknown`) | `APP_VERSION`, `GIT_SHA` | `source`, `version`, `revision`, `title` (`rag-news-backend`) |
+| Frontend | Same | None; no runtime version endpoint | `source`, `version`, `revision`, `title` (`rag-news-frontend`) |
+
+`source` is `https://github.com/Henric0612/rag-news-intelligence-platform`;
+`version` and `revision` are the build arguments. No `licenses` label is set
+because the repository has no license. The identity instructions follow every
+filesystem-changing instruction of each runtime stage, so earlier layers stay
+cached.
+
+A build without arguments, including `docker compose build` (`compose.yaml`
+passes none), reports `0.0.0-dev` / `unknown`. Only a release build that passes
+`APP_VERSION` and the 40-character `GIT_SHA` carries a release identity. A
+container environment that sets `APP_VERSION` or `GIT_SHA` overrides the
+Backend image value, which is why deployment configuration must not set them.
+
+Validation at CD-WP2 (2026-10-18):
+
+- `pytest -c Backend/pytest.ini Backend/tests -m ci`: 113 passed, up from 111
+  (+2 health build-identity tests). The 41-case count in `Docs/Phase-C-CI.md`
+  is the Phase C initial inventory.
+- Frontend image built locally twice: without arguments, the labels read
+  `0.0.0-dev` / `unknown`; with explicit arguments, they match the supplied
+  version and 40-character SHA exactly.
+- The Backend image was not built in CD-WP2, so its labels and `ENV` are not
+  yet verified. A later Backend Image Validation run (default arguments) records
+  `docker image inspect` output from which they can be checked; it does not
+  assert them.
+- The Frontend image also inherits OCI labels from the `caddy` base image,
+  including `org.opencontainers.image.licenses=Apache-2.0`, which describes
+  Caddy, not this repository. Treatment is left to Human Review before any
+  release.
+
 ## Approval matrix and order
 
 Each work package is delivered through its own pull request under

@@ -51,6 +51,16 @@ COPY --chown=app:app . /app/Backend
 RUN mkdir -p /app/Backend/data/sqlite /app/Backend/data/faiss /app/Backend/data/uploads \
     && chown -R app:app /app/Backend/data
 
+# Build identity stays last so version arguments do not invalidate earlier layers.
+ARG APP_VERSION=0.0.0-dev
+ARG GIT_SHA=unknown
+ENV APP_VERSION=${APP_VERSION} \
+    GIT_SHA=${GIT_SHA}
+LABEL org.opencontainers.image.source="https://github.com/Henric0612/rag-news-intelligence-platform" \
+      org.opencontainers.image.version="${APP_VERSION}" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.title="rag-news-backend"
+
 USER app
 EXPOSE 5000
 

@@ -79,3 +79,28 @@ class TestSprint1HealthAPI:
 
         assert ready_response.status_code == 503
         assert client.get('/api/health').status_code == 200
+
+    @pytest.mark.ci
+    def test_health_reports_default_build_info_when_unset(self, client, monkeypatch):
+        monkeypatch.delenv('APP_VERSION', raising=False)
+        monkeypatch.delenv('GIT_SHA', raising=False)
+
+        response = client.get('/api/health')
+
+        assert response.status_code == 200
+        data = response.get_json()['data']
+        assert data['version'] == '0.0.0-dev'
+        assert data['git_sha'] == 'unknown'
+
+    @pytest.mark.ci
+    def test_health_echoes_build_info_from_environment(self, client, monkeypatch):
+        monkeypatch.setenv('APP_VERSION', '0.1.0')
+        monkeypatch.setenv('GIT_SHA', 'a' * 40)
+        first = client.get('/api/health').get_json()['data']
+
+        monkeypatch.setenv('APP_VERSION', '0.1.1')
+        monkeypatch.setenv('GIT_SHA', 'b' * 40)
+        second = client.get('/api/health').get_json()['data']
+
+        assert (first['version'], first['git_sha']) == ('0.1.0', 'a' * 40)
+        assert (second['version'], second['git_sha']) == ('0.1.1', 'b' * 40)

@@ -1,0 +1,267 @@
+name: Release
+
+# Contract: Docs/Phase-E-Delivery.md and the frozen Phase E plan, section 5.
+# A protected annotated vX.Y.Z tag push is the only write path. A manual
+# dispatch is a dry run: it runs the gate and builds images, and has no job
+# with registry or repository write permission.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Exact 40-character commit SHA on main (dry run only)
+        required: true
+        type: string
+      version:
+        description: Release version vX.Y.Z (dry run only)
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+    outputs:
+      sha: ${{ steps.gate.outputs.sha }}
+      version: ${{ steps.gate.outputs.version }}
+      app_version: ${{ steps.gate.outputs.app_version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Record gate inputs
+        run: |
+          python3 --version
+          git rev-parse HEAD refs/remotes/origin/main
+      # Version and tag identity, main ancestry, Daily CI run and required
+      # check runs, published release, anonymous GHCR tag state, then the
+      # deterministic delivery checks in a worktree at the exact SHA. Outputs
+      # and evidence are written only if every condition holds.
+      - name: Run release gate
+        id: gate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          INPUT_SHA: ${{ inputs.sha }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          mkdir -p artifacts
+          python3 -m deploy.rag_delivery gate \
+            --source-dir "$RUNNER_TEMP/release-source" \
+            --evidence artifacts/gate-evidence.json
+      - name: Upload gate evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: gate-evidence
+          path: artifacts/gate-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+
+  build-push:
+    needs: gate
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    env:
+      RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+      RELEASE_VERSION: ${{ needs.gate.outputs.version }}
+    outputs:
+      backend_digest: ${{ steps.push.outputs.backend_digest }}
+      frontend_digest: ${{ steps.push.outputs.frontend_digest }}
+    steps:
+      - name: Confirm tag-push context
+        run: |
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_REF" = "refs/tags/$RELEASE_VERSION"
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      - name: Record runner resources and checkout
+        run: |
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          docker version
+          df -h
+      - name: Build and inspect release images
+        run: |
+          mkdir -p artifacts
+          python3 -m deploy.rag_delivery build \
+            --source-dir . --version "$RELEASE_VERSION" --sha "$RELEASE_SHA" \
+            --evidence artifacts/build-evidence.json
+      # Uploaded before anything is pushed so an upload failure cannot occur
+      # after a push. overwrite lets a rerun after a failure that pushed
+      # nothing replace the evidence with that of the images it then pushes.
+      # A failure of this job after a complete push is not resumable: a rerun
+      # rebuilds, overwrites this artifact with evidence for an image that is
+      # never pushed, and stops at the pre-push check. Human Review of that
+      # case uses the pushed-images artifact and the first attempt's logs.
+      - name: Upload build evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-evidence
+          path: artifacts/build-evidence.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
+      - name: Log in to GHCR
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      # Pushes nothing unless authenticated lookups confirm all four target
+      # tags are NOT_FOUND; then pushes sha-<7> before vX.Y.Z and reads back.
+      - name: Confirm target tags absent, push and read back
+        id: push
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 -m deploy.rag_delivery push \
+            --version "$RELEASE_VERSION" --sha "$RELEASE_SHA" \
+            --out artifacts/pushed-images.json
+      - name: Log out of GHCR
+        if: ${{ always() }}
+        run: docker logout ghcr.io
+      - name: Record post-build disk usage
+        if: ${{ !cancelled() }}
+        run: df -h
+      - name: Upload push read-back
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: pushed-images
+          path: artifacts/pushed-images.json
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 30
+
+  build-dry-run:
+    needs: gate
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+      RELEASE_VERSION: ${{ needs.gate.outputs.version }}
+    steps:
+      - name: Confirm dispatch context
+        run: test "$GITHUB_EVENT_NAME" = workflow_dispatch
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      - name: Record runner resources and checkout
+        run: |
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          docker version
+          df -h
+      - name: Build and inspect release images (no push)
+        run: |
+          mkdir -p artifacts
+          python3 -m deploy.rag_delivery build \
+            --source-dir . --version "$RELEASE_VERSION" --sha "$RELEASE_SHA" \
+            --evidence artifacts/build-evidence.json
+      - name: Record post-build disk usage
+        if: ${{ !cancelled() }}
+        run: df -h
+      - name: Upload dry-run build evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: dry-run-build-evidence
+          path: artifacts/build-evidence.json
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    needs: [gate, build-push]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: read
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+      RELEASE_VERSION: ${{ needs.gate.outputs.version }}
+      BACKEND_DIGEST: ${{ needs.build-push.outputs.backend_digest }}
+      FRONTEND_DIGEST: ${{ needs.build-push.outputs.frontend_digest }}
+    steps:
+      - name: Confirm tag-push context
+        run: |
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_REF" = "refs/tags/$RELEASE_VERSION"
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v7
+        with:
+          name: gate-evidence
+          path: evidence
+      - uses: actions/download-artifact@v7
+        with:
+          name: build-evidence
+          path: evidence
+      # Steps 1-4 never create a Release object. A failure here, including the
+      # expected first-release anonymous-pull failure while packages are
+      # private, is resumed with "Re-run failed jobs" on this same run; this
+      # job never builds or pushes.
+      - name: 1. Resolve release tags and digests from the registry
+        run: |
+          python3 -m deploy.rag_delivery release-resolve \
+            --gate-evidence evidence/gate-evidence.json \
+            --build-evidence evidence/build-evidence.json \
+            --backend-digest "$BACKEND_DIGEST" --frontend-digest "$FRONTEND_DIGEST" \
+            --out evidence/registry-images.json
+      - name: 2. Build and validate the release manifest
+        run: |
+          python3 -m deploy.rag_delivery manifest build \
+            --gate-evidence evidence/gate-evidence.json \
+            --build-evidence evidence/build-evidence.json \
+            --registry-images evidence/registry-images.json \
+            --out-dir release-assets
+      - name: 3. Check anonymous pull availability
+        run: python3 -m deploy.rag_delivery anonymous-check --manifest release-assets/release-manifest.json
+      - name: 4. Check existing release state
+        run: python3 -m deploy.rag_delivery release-state --tag "$RELEASE_VERSION"
+      - name: 5. Create draft release with assets
+        id: draft
+        run: python3 -m deploy.rag_delivery release-draft --assets-dir release-assets
+      - name: 6. Download and verify draft assets
+        env:
+          RELEASE_ID: ${{ steps.draft.outputs.release_id }}
+        run: python3 -m deploy.rag_delivery release-verify --assets-dir release-assets --release-id "$RELEASE_ID"
+      - name: 7-8. Publish and read back
+        env:
+          RELEASE_ID: ${{ steps.draft.outputs.release_id }}
+        run: python3 -m deploy.rag_delivery release-publish --assets-dir release-assets --release-id "$RELEASE_ID"
+      - name: Upload release assets
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-assets-attempt-${{ github.run_attempt }}
+          path: |
+            release-assets/
+            evidence/registry-images.json
+          if-no-files-found: ignore
+          retention-days: 30

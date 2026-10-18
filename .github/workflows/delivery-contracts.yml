@@ -1,0 +1,37 @@
+name: Delivery Contracts
+
+# Early pull-request feedback for the Phase E delivery tools. Not a required
+# check and not release evidence: the release gate reruns these tests itself
+# on the exact SHA being released.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  delivery-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Record runtime
+        run: |
+          python3 --version
+          git rev-parse HEAD
+      - name: Run delivery tool contracts
+        run: python3 -m unittest discover deploy/tests

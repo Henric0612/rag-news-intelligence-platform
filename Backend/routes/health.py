@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from Backend.models import db
 from Backend.utils.response import error_response, success_response
+from Backend.version import get_build_info
 
 
 health_bp = Blueprint('health', __name__, url_prefix='/api')
@@ -16,11 +17,13 @@ health_bp = Blueprint('health', __name__, url_prefix='/api')
 @health_bp.route('/health', methods=['GET'])
 def health_check():
     """Process liveness. External AI failures must not change this response."""
+    build_info = get_build_info()
     response_data = {
         'status': 'healthy',
         'service': 'RAG News Intelligence Platform Backend',
         'timestamp': datetime.now(timezone.utc).isoformat(),
-        'version': '1.0.0'
+        'version': build_info['version'],
+        'git_sha': build_info['git_sha'],
     }
     if 'APP_INIT_TIME' in current_app.config:
         response_data['app_init_time_seconds'] = round(current_app.config['APP_INIT_TIME'], 2)

@@ -1,0 +1,9 @@
+services:
+  backend:
+    build: !reset null
+    image: ${RAG_BACKEND_IMAGE:?set backend image digest ref}
+    pull_policy: never
+  frontend:
+    build: !reset null
+    image: ${RAG_FRONTEND_IMAGE:?set frontend image digest ref}
+    pull_policy: never

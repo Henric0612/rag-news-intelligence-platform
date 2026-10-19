@@ -20,6 +20,7 @@ from .contract import (
     MANIFEST_NAME,
     MANIFEST_SCHEMA_VERSION,
     PLATFORM,
+    PREVIEW_KIND,
     PROJECT,
     RELEASE_WORKFLOW_PATH,
     REPOSITORY,
@@ -148,6 +149,9 @@ def manifest_errors(manifest):
     """Return every contract violation (empty list means valid)."""
     if isinstance(manifest, dict) and manifest.get("kind") == "rehearsal":
         return ["kind: rehearsal manifests are never release evidence; release validator rejects them"]
+    if isinstance(manifest, dict) and manifest.get("kind") == PREVIEW_KIND:
+        return [f"kind: {PREVIEW_KIND} is a dry-run preview, not deployable and never release evidence; "
+                "release validator rejects it"]
     errors = []
     _check_spec(manifest, SPEC, "", errors)
     if errors:

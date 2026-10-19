@@ -181,6 +181,11 @@ Rehearsal manifests used before the first release have a separate
 `kind: rehearsal` structure without gate or registry fields. The release
 validator always rejects them, and they are never release evidence.
 
+Dry runs produce a `kind: release-preview` document instead (see
+[D1 dry-run evidence](#d1-dry-run-evidence)). The release validator also
+rejects every preview; a preview is never deployable and never release
+evidence.
+
 ## Release completeness
 
 A version is **COMPLETE** if and only if all five conditions hold:
@@ -338,6 +343,83 @@ Validation at CD-WP2 (2026-10-18):
   including `org.opencontainers.image.licenses=Apache-2.0`, which describes
   Caddy, not this repository. Treatment is left to Human Review before any
   release.
+
+## D1 dry-run evidence
+
+A `workflow_dispatch` dry run writes nothing to the registry or the
+repository: its `build-dry-run` job has only `contents: read` and never logs
+in, pushes or touches releases. After the
+gate passes it uploads five artifacts (retained 14 days, so the owner
+downloads them into the Phase E evidence kept outside Git):
+
+| Artifact | Command | Content | Fails the dry run when |
+| --- | --- | --- | --- |
+| `dry-run-public-ghcr-probe` | `public-probe` | Anonymous read of the pinned public image below: token, manifest, OCI index platform selection, config blob and labels, with every request's host, path, status and authorization type (no credentials) | Any result differs from the pinned values, or any request fails; runs before the build, and its evidence is uploaded even on failure |
+| `dry-run-build-evidence` | `build` | Unchanged CD-WP3 build evidence | As before |
+| `dry-run-image-layers` | `layers` | `docker history` and `docker image inspect` per image, the local image store driver | Data cannot be read or does not match the built image IDs |
+| `dry-run-license-inventory` | `license-inventory` | Third-party inventory and findings (U10, below) | Data cannot be collected or parsed; findings never fail it |
+| `dry-run-release-preview` | `manifest preview` | `kind: release-preview` document | Inputs are inconsistent or the preview violates its contract |
+
+**Release preview.** It carries what a dry run can verify: identity, the
+dispatch gate summary (`gate.event: workflow_dispatch`, `gate_run_id`), build
+inputs, data compatibility and the locally built images (`local_images`:
+image ID, local tags, labels, local size and layer summary). It sets
+`deployable: false` and `release_evidence: false`. Fields that exist only
+after a tag push are absent and listed in `pending_until_push`:
+`tag_object_sha` and, per image, the registry `digest`, `ref`, `tags`,
+`media_type`, `compressed_size_bytes` and `max_layer_bytes`. A preview that
+contains any of these is invalid. `reproduced_by_tag_run` records that the
+tag-push run reruns the gate and rebuilds, so its own values, not the
+preview's, enter the release manifest.
+
+**Public GHCR probe (U3, logic only).** The pinned reference is
+`ghcr.io/github/github-mcp-server@sha256:d909564772c4afc7ed08831c1fce367c051d82f8602abc4c1f033cdfc4a89e68`
+(tag `v0.20.1` when pinned on 2026-10-19; OCI index with `linux/amd64` and
+`linux/arm64` manifests and two attestation manifests). It runs the same anonymous
+`RegistryClient` path as the release job's anonymous pull check. It does not
+show that the release packages are public: R1 provides that evidence. If the
+pinned image disappears, the dry run fails for Human Review; there is no
+fallback image or registry.
+
+**Size semantics (U8).** Three measurements are kept apart:
+
+| Measurement | Where | Field |
+| --- | --- | --- |
+| Local image size, `docker image inspect .Size` | D1 build evidence and preview | `uncompressed_size_bytes` (build evidence), `local_images.<image>.uncompressed_size_bytes` (preview) |
+| Build-side local layer sizes, `docker history --human=false`, bytes | D1 layer evidence and preview | `max_local_layer_bytes`, `history_total_bytes`, `nonzero_layer_count` |
+| Registry compressed transfer size and manifest layer sizes | R1 registry read-back only | Release manifest `compressed_size_bytes`, `max_layer_bytes` |
+
+Build-side values never populate the release manifest's registry fields, and
+the release manifest schema is unchanged. The meaning of `.Size` depends on
+the local image store, which the layer evidence records: on a local Docker
+Desktop with the containerd image store, `.Size` of a Backend image exceeded
+the sum of its history layer sizes.
+
+**License inventory (U10).** Collected read-only from the dry-run images
+(containers run with `--network none` and `--pull never`):
+
+- Backend: `dpkg-query` packages with copyright file presence and DEP-5
+  `License` names; `importlib.metadata` distributions; the CPython
+  `LICENSE.txt`; the license front matter of each pinned model snapshot.
+- Frontend: `apk list --installed`; `caddy version`, `caddy build-info` and the
+  binary's sha256; the inherited `org.opencontainers.image.licenses` label.
+- npm: the declarative lockfile `Frontend/package-lock.json`, bound by sha256
+  to the build evidence, with each package marked `production` or
+  `development`.
+
+Every copyleft, restrictive, missing or unrecognized license, missing
+copyright file, the unverified Caddy binary license and its uncollected Go
+module licenses, and the inherited label are recorded as findings. The
+document always has `conclusion: PENDING_HUMAN_REVIEW` and
+`compliance_decision: null`; it is input to the review above, not its result.
+
+The installed npm dependency tree (`npm ls --all --json`) is **not
+collected**. It exists only in the discarded Frontend build stage, and the
+runtime image contains neither Node nor `node_modules`. The inventory records
+this as an `evidence-gap` finding with two alternatives for Human Review: a
+dry-run-only `docker build --target build` of the same SHA, with `npm ls` in
+that stage and a check that its `/app/dist` equals the runtime `/srv`; or an
+`npm ci --ignore-scripts` reinstall on the runner, recorded as weaker evidence.
 
 ## Approval matrix and order
 

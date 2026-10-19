@@ -23,6 +23,8 @@ from .contract import (
 )
 from .gate import GateError, GateIO, default_test_runner, run_gate
 from .github import GitHubClient, GitHubError
+from .layers import LayerError, layer_evidence
+from .licenses import LicenseError, build_inventory
 from .manifest import (
     ManifestError,
     build_manifest,
@@ -31,6 +33,8 @@ from .manifest import (
     render_sums,
     sums_errors,
 )
+from .preview import PreviewError, build_preview
+from .public_probe import ProbeError, run_probe
 from .registry import RegistryClient, RegistryError, resolve_release_images
 from .release import (
     ReleaseError,
@@ -44,8 +48,8 @@ from .release import (
 )
 from .transport import TransportError
 
-FAILURES = (BuildError, ContractError, GateError, GitHubError, ManifestError,
-            RegistryError, ReleaseError, TransportError)
+FAILURES = (BuildError, ContractError, GateError, GitHubError, LayerError, LicenseError,
+            ManifestError, PreviewError, ProbeError, RegistryError, ReleaseError, TransportError)
 
 
 def utc_now():
@@ -115,6 +119,26 @@ def cmd_build(args):
     write_json(args.evidence, evidence)
 
 
+def cmd_public_probe(args):
+    evidence, errors = run_probe(utc_now)
+    write_json(args.out, evidence)
+    if errors:
+        raise ProbeError("; ".join(errors))
+    print(f"anonymous read of {evidence['reference']} reproduced every pinned value")
+
+
+def cmd_layers(args):
+    write_json(args.out, layer_evidence(read_json(args.build_evidence), utc_now))
+
+
+def cmd_license_inventory(args):
+    inventory = build_inventory(args.source_dir, read_json(args.build_evidence), utc_now)
+    write_json(args.out, inventory)
+    summary = inventory["summary"]
+    print(f"license inventory collected: {summary['findings']} findings for Human Review "
+          f"{summary['by_category']}; conclusion {inventory['conclusion']}")
+
+
 def cmd_push(args):
     registry = RegistryClient(credentials=registry_credentials())
     result = push_release_images(registry, args.version, args.sha)
@@ -151,6 +175,14 @@ def cmd_manifest_build(args):
     (out / SUMS_NAME).write_text(render_sums(files))
     _validate_dir(out)
     print(f"manifest for {manifest['tag']} written and validated in {out}")
+
+
+def cmd_manifest_preview(args):
+    preview = build_preview(read_json(args.gate_evidence), read_json(args.build_evidence),
+                            read_json(args.layer_evidence))
+    write_json(args.out, preview)
+    print(f"release preview for {preview['tag']} written; deployable=false, "
+          f"{len(preview['pending_until_push'])} fields pending until push")
 
 
 def _validate_dir(directory):
@@ -225,6 +257,21 @@ def parser():
     p.add_argument("--evidence", required=True)
     p.set_defaults(func=cmd_build)
 
+    p = sub.add_parser("public-probe", help="dry run: anonymous read probe of a pinned public GHCR image")
+    p.add_argument("--out", required=True)
+    p.set_defaults(func=cmd_public_probe)
+
+    p = sub.add_parser("layers", help="dry run: build-side local layer sizes (docker history)")
+    p.add_argument("--build-evidence", required=True)
+    p.add_argument("--out", required=True)
+    p.set_defaults(func=cmd_layers)
+
+    p = sub.add_parser("license-inventory", help="dry run: read-only third-party license inventory")
+    p.add_argument("--source-dir", required=True)
+    p.add_argument("--build-evidence", required=True)
+    p.add_argument("--out", required=True)
+    p.set_defaults(func=cmd_license_inventory)
+
     p = sub.add_parser("push", help="tag path: confirm absence, push, read back")
     p.add_argument("--version", required=True)
     p.add_argument("--sha", required=True)
@@ -247,6 +294,12 @@ def parser():
     p.add_argument("--registry-images", required=True)
     p.add_argument("--out-dir", required=True)
     p.set_defaults(func=cmd_manifest_build)
+    p = msub.add_parser("preview", help="dry run: build a non-deployable release-preview document")
+    p.add_argument("--gate-evidence", required=True)
+    p.add_argument("--build-evidence", required=True)
+    p.add_argument("--layer-evidence", required=True)
+    p.add_argument("--out", required=True)
+    p.set_defaults(func=cmd_manifest_preview)
     p = msub.add_parser("validate", help="validate a manifest or a directory of release assets")
     group = p.add_mutually_exclusive_group(required=True)
     group.add_argument("--manifest")

@@ -186,12 +186,40 @@ jobs:
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
           docker version
           df -h
-      - name: Build and inspect release images (no push)
+      - uses: actions/download-artifact@v7
+        with:
+          name: gate-evidence
+          path: evidence
+      # U3 logic check against a digest-pinned public GHCR image, before the
+      # build so a failure stops the dry run early. Anonymous; it never reads
+      # the release packages. The evidence is written on failure as well.
+      - name: Probe a pinned public GHCR image anonymously
         run: |
           mkdir -p artifacts
+          python3 -m deploy.rag_delivery public-probe --out artifacts/public-ghcr-probe.json
+      - name: Build and inspect release images (no push)
+        run: |
           python3 -m deploy.rag_delivery build \
             --source-dir . --version "$RELEASE_VERSION" --sha "$RELEASE_SHA" \
             --evidence artifacts/build-evidence.json
+      # Read-only evidence from the images just built. Each step fails the
+      # dry run if its data cannot be collected; license findings do not fail
+      # it and are never a compliance decision (Human Review, U10).
+      - name: Measure build-side local layer sizes
+        run: |
+          python3 -m deploy.rag_delivery layers \
+            --build-evidence artifacts/build-evidence.json --out artifacts/image-layers.json
+      - name: Collect third-party license inventory
+        run: |
+          python3 -m deploy.rag_delivery license-inventory --source-dir . \
+            --build-evidence artifacts/build-evidence.json --out artifacts/license-inventory.json
+      - name: Build release preview (not deployable)
+        run: |
+          python3 -m deploy.rag_delivery manifest preview \
+            --gate-evidence evidence/gate-evidence.json \
+            --build-evidence artifacts/build-evidence.json \
+            --layer-evidence artifacts/image-layers.json \
+            --out artifacts/release-preview.json
       - name: Record post-build disk usage
         if: ${{ !cancelled() }}
         run: df -h
@@ -201,6 +229,40 @@ jobs:
           name: dry-run-build-evidence
           path: artifacts/build-evidence.json
           if-no-files-found: error
+          overwrite: true
+          retention-days: 14
+      - name: Upload public GHCR probe evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: dry-run-public-ghcr-probe
+          path: artifacts/public-ghcr-probe.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 14
+      - name: Upload layer size evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: dry-run-image-layers
+          path: artifacts/image-layers.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 14
+      - name: Upload license inventory
+        uses: actions/upload-artifact@v7
+        with:
+          name: dry-run-license-inventory
+          path: artifacts/license-inventory.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 14
+      - name: Upload release preview
+        uses: actions/upload-artifact@v7
+        with:
+          name: dry-run-release-preview
+          path: artifacts/release-preview.json
+          if-no-files-found: error
+          overwrite: true
           retention-days: 14
 
   release:
